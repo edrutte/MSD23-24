@@ -5,4 +5,4 @@
 * [Alec Paul](https://github.com/asp6244) - Project Manager
 * Nick Larrabee - Purchasing Agent
 * Devin Alberto - Facilitator
-* Justin Chienyuen - Team Communicator
+* [Justin Chienyuen](https://github.com/jcc3249) - Team Communicator
