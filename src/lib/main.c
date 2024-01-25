@@ -4,9 +4,9 @@
 #include <fcntl.h>
 #include <gpiod.h>
 #include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #include "main.h"
 
@@ -57,12 +57,14 @@ int main(int argc, char* argv[]) {
         default:
             break;
     }
-    write(fish_stdin_pipefd[1], "uci\n", 5);
-    sleep(1);
+    write(fish_stdin_pipefd[1], "uci", 3);
+    nanosleep(&pipe_delay, NULL);
     char fish[256] = {0};
-    read(fish_stdout_pipefd[0], fish, 255);
-    fflush(stdout);
-    printf("\nfish out: %s\n", fish);
+	ssize_t n_read = read(fish_stdout_pipefd[0], fish, 256);
+	while (n_read > 0) {
+		printf("%.*s", (int) n_read, fish);
+		n_read = read(fish_stdout_pipefd[0], fish, 256);
+	}
     // Maybe call wait()
 	return EXIT_SUCCESS;
 }
