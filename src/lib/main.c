@@ -2,14 +2,15 @@
 #define _GNU_SOURCE// For pipe2, dup2, etc.
 #endif
 #include <fcntl.h>
-#include <gpiod.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "main.h"
+#include "pi5_gpio.h"
 
 _Noreturn void cleanup_and_die(int num_fd, ...) {
 	va_list to_close;
@@ -73,8 +74,16 @@ int main(int argc, char* argv[]) {
 	char fish[PIPE_BUF] = {0};
 	read(fish_stdout_pipefd[0], fish, 1);// Get rid of Stockfish intro
     write(fish_stdin_pipefd[1], "uci", 3);
-	ssize_t n_read = read(fish_stdout_pipefd[0], fish, PIPE_BUF);
-	printf("%.*s", (int) n_read, fish);
+	read(fish_stdout_pipefd[0], fish, PIPE_BUF);
+	if (strstr(fish, "uciok") == NULL) {
+		fprintf(stderr, "Stockfish failed to respond\n");
+		cleanup_and_die(2, fish_stdin_pipefd[1], fish_stdout_pipefd[0]);
+	}
+	struct gpiod_chip *gpio_chip;
+	if (init_gpio(gpio_chip)) {
+		fprintf(stderr, "Could not initialize gpio\n");
+		cleanup_and_die(2, fish_stdin_pipefd[1], fish_stdout_pipefd[0]);
+	}
     close(fish_stdin_pipefd[1]);
 	close(fish_stdout_pipefd[0]);
 	// Maybe call wait()
