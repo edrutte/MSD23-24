@@ -117,6 +117,7 @@ int main(int argc, char* argv[]) {
 	write(fish_stdin_pipefd[1], "position startpos", 17);
 	close(fish_stdin_pipefd[1]);
 	close(fish_stdout_pipefd[0]);
+	gpiod_chip_close(gpio_chip);
 	// Maybe call wait()
 	return EXIT_SUCCESS;
 }
