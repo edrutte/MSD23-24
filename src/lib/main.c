@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <unistd.h>
 #include "main.h"
 #include "pi5_gpio.h"
@@ -73,18 +74,48 @@ int main(int argc, char* argv[]) {
     }
 	char fish[PIPE_BUF] = {0};
 	read(fish_stdout_pipefd[0], fish, 1);// Get rid of Stockfish intro
+	int epollfd = epoll_create1(0);
+	if (epollfd == -1) {
+		perror("epoll_create1");
+		cleanup_and_die(2, fish_stdin_pipefd[1], fish_stdout_pipefd[0]);
+	}
+	struct epoll_event events, ev = {.events = EPOLLIN, .data.fd = fish_stdout_pipefd[0]};
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fish_stdout_pipefd[0], &ev) == -1) {
+		perror("epoll_ctl: fish_stdout_pipe");
+		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	}
     write(fish_stdin_pipefd[1], "uci", 3);
+	if (epoll_wait(epollfd, &events, 1, 500) == -1) {
+		perror("epoll_wait");
+		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	}
 	read(fish_stdout_pipefd[0], fish, PIPE_BUF);
 	if (strstr(fish, "uciok") == NULL) {
 		fprintf(stderr, "Stockfish failed to respond\n");
-		cleanup_and_die(2, fish_stdin_pipefd[1], fish_stdout_pipefd[0]);
+		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
 	struct gpiod_chip *gpio_chip;
 	if (init_gpio(gpio_chip)) {
 		fprintf(stderr, "Could not initialize gpio\n");
-		cleanup_and_die(2, fish_stdin_pipefd[1], fish_stdout_pipefd[0]);
+		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
-    close(fish_stdin_pipefd[1]);
+	write(fish_stdin_pipefd[1], "setoption name Threads value 4", 30);
+	write(fish_stdin_pipefd[1], "setoption name Ponder value true", 32);
+	write(fish_stdin_pipefd[1], "ucinewgame", 10);
+	// TODO: Extract into a stockfish_isready function
+	write(fish_stdin_pipefd[1], "isready", 7);
+	if (epoll_wait(epollfd, &events, 1, 5000) == -1) {
+		perror("epoll_wait");
+		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	}
+	read(fish_stdout_pipefd[0], fish, PIPE_BUF);
+	if (strstr(fish, "readyok") == NULL) {
+		fprintf(stderr, "Stockfish failed to respond\n");
+		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	}
+	// End TODO
+	write(fish_stdin_pipefd[1], "position startpos", 17);
+	close(fish_stdin_pipefd[1]);
 	close(fish_stdout_pipefd[0]);
 	// Maybe call wait()
 	return EXIT_SUCCESS;
