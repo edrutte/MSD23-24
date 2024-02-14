@@ -11,7 +11,8 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 #include "main.h"
-#include "pi5_gpio.h"
+#include "pi_gpio.h"
+#include "pi_spi.h"
 
 _Noreturn void cleanup_and_die(int num_fd, ...) {
 	va_list to_close;

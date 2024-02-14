@@ -1,5 +1,5 @@
 // Parts taken from https://forums.raspberrypi.com/viewtopic.php?t=358676&sid=33fab08771d794f0527f0d4985b1012d&start=25#p2175169
-#include "pi5_gpio.h"
+#include "pi_gpio.h"
 
 /**
  * Initialize gpio on the Pi 5
