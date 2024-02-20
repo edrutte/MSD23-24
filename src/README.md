@@ -13,6 +13,8 @@
 
 ```
 git submodule update --init
+cd Stockfish
+git apply ../suppress_stockfish_info.patch
 ```
 
 ## Setting up the build
