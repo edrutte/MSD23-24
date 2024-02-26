@@ -14,6 +14,11 @@
 #include "pi_gpio.h"
 #include "pi_spi.h"
 
+#ifdef VERBOSE
+#define read(...) printf("read %ld bytes on line %u\n", read(__VA_ARGS__), __LINE__)
+#define write(...) printf("wrote %ld bytes on line %u\n", write(__VA_ARGS__), __LINE__)
+#endif
+
 _Noreturn void cleanup_and_die(int num_fd, ...) {
 	va_list to_close;
 	va_start(to_close, num_fd);
