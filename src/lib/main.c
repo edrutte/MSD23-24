@@ -100,11 +100,13 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "Stockfish failed to respond\n");
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
+#ifdef __aarch64__
 	struct gpiod_chip *gpio_chip;
 	if (init_gpio(gpio_chip)) {
 		fprintf(stderr, "Could not initialize gpio\n");
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
+#endif
 	write(fish_stdin_pipefd[1], "setoption name Threads value 4", 30);
 	write(fish_stdin_pipefd[1], "setoption name Ponder value true", 32);
 	write(fish_stdin_pipefd[1], "ucinewgame", 10);
@@ -123,7 +125,9 @@ int main(int argc, char* argv[]) {
 	write(fish_stdin_pipefd[1], "position startpos", 17);
 	close(fish_stdin_pipefd[1]);
 	close(fish_stdout_pipefd[0]);
+#ifdef __aarch64__
 	gpiod_chip_close(gpio_chip);
+#endif
 	// Maybe call wait()
 	return EXIT_SUCCESS;
 }
