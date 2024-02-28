@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
         perror("pipe");
         exit(EXIT_FAILURE);
     }
-    if (pipe2(fish_stdout_pipefd, O_DIRECT) == -1) {
+    if (pipe2(fish_stdout_pipefd, O_NONBLOCK) == -1) {
         perror("pipe");
 	    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdin_pipefd[1]);
     }
@@ -79,7 +79,6 @@ int main(int argc, char* argv[]) {
 		    close(fish_stdin_pipefd[0]);
     }
 	char fish[PIPE_BUF] = {0};
-	read(fish_stdout_pipefd[0], fish, 1);// Get rid of Stockfish intro
 	int epollfd = epoll_create1(0);
 	if (epollfd == -1) {
 		perror("epoll_create1");
@@ -90,6 +89,15 @@ int main(int argc, char* argv[]) {
 		perror("epoll_ctl: fish_stdout_pipe");
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
+	switch (epoll_wait(epollfd, &events, 1, 5000)) {
+		case -1:
+			perror("epoll_wait");
+			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+		case 0:
+			fprintf(stderr, "epoll timeout\n");
+			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	}
+	read(fish_stdout_pipefd[0], fish, PIPE_BUF);// Get rid of Stockfish intro
     write(fish_stdin_pipefd[1], "uci", 3);
 	if (epoll_wait(epollfd, &events, 1, 500) == -1) {
 		perror("epoll_wait");
@@ -112,9 +120,13 @@ int main(int argc, char* argv[]) {
 	write(fish_stdin_pipefd[1], "ucinewgame", 10);
 	// TODO: Extract into a stockfish_isready function
 	write(fish_stdin_pipefd[1], "isready", 7);
-	if (epoll_wait(epollfd, &events, 1, 5000) == -1) {
-		perror("epoll_wait");
-		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	switch (epoll_wait(epollfd, &events, 1, 5000)) {
+		case -1:
+			perror("epoll_wait");
+			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+		case 0:
+			fprintf(stderr, "epoll timeout\n");
+			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
 	read(fish_stdout_pipefd[0], fish, PIPE_BUF);
 	if (strstr(fish, "readyok") == NULL) {
