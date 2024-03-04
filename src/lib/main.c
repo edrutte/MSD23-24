@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
         printf("Please supply path to stockfish binary\n");
         exit(EXIT_FAILURE);
     }
-    if (signal(SIGCHLD, SIG_IGN) == SIG_ERR) {
+    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
         exit(EXIT_FAILURE);
     }
@@ -109,8 +109,7 @@ int main(int argc, char* argv[]) {
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
 #ifdef __aarch64__
-	struct gpiod_chip *gpio_chip;
-	if (init_gpio(gpio_chip)) {
+	if (wiringPiSetupGpio() == -1) {
 		fprintf(stderr, "Could not initialize gpio\n");
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}

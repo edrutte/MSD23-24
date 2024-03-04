@@ -7,7 +7,7 @@
 * GCC/Clang
 * Ninja (optional, but recommended)
 * Ccache (optional, but recommended)
-* libgpiod-dev
+* [wiringPi](https://github.com/WiringPi/WiringPi)
 
 ## Clone Stockfish submodule
 

@@ -1,8 +1,8 @@
 #ifndef CHESS_PI_GPIO_H
 #define CHESS_PI_GPIO_H
-#include <gpiod.h>
-
-int init_gpio(struct gpiod_chip *gpio_chip);
-int read_gpio(struct gpiod_chip *gpio_chip, int gpio_pin);
-int write_gpio(struct gpiod_chip *gpio_chip, int gpio_pin, int value);
+#ifdef __aarch64__
+#include <wiringPi.h>
+#endif
+int read_gpio(int gpio_pin);
+int write_gpio(int gpio_pin, int value);
 #endif //CHESS_PI_GPIO_H
