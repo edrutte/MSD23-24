@@ -1,3 +1,5 @@
+#include <linux/spi/spidev.h>
+#include <sys/ioctl.h>
 #include "pi_spi.h"
 
 int send_spi(int fd, uint8_t const *tx, uint8_t *rx, size_t len) {
