@@ -15,7 +15,7 @@ void stepper_move_rel_mm(double x_mm, double y_mm) {
 		pwmToneWrite(X_STEPPER_PIN, 0);
 	} else {
 		delay(move_time_x_ms);
-		pwmToneWrite(x_STEPPER_PIN, 0);
+		pwmToneWrite(X_STEPPER_PIN, 0);
 		delay(move_time_y_ms - move_time_x_ms);
 		pwmToneWrite(Y_STEPPER_PIN, 0);
 	}
