@@ -1,5 +1,5 @@
 #include <fcntl.h>
-#include <stdint.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include "../MFRC630/mfrc630.h"
 #include "pi_rfid.h"
@@ -30,6 +30,12 @@ void init_rfid() {
 
 void debug_block_until_tag_and_dump() {
 	init_rfid();
+	if (mfrc630_read_reg(0x7f) == 0x1a) {
+		printf("mfrc read good\n");
+	} else {
+		printf("cry\n");
+		exit(1);
+	}
 	uint16_t atqa = 0;
 	while (!atqa) {
 		atqa = mfrc630_iso14443a_REQA();
