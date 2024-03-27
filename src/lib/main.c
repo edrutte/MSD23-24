@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include "main.h"
 #include "pi_gpio.h"
+#include "pi_rfid.h"
 #include "pi_spi.h"
 
 #ifdef VERBOSE
@@ -55,6 +56,7 @@ int main(int argc, char* argv[]) {
         perror("pipe");
 	    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdin_pipefd[1]);
     }
+	debug_block_until_tag_and_dump();
     pid = fork();
     switch (pid) {
         case -1:
