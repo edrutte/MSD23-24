@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
         perror("pipe");
 	    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdin_pipefd[1]);
     }
+	wiringPiSetup();
 	debug_block_until_tag_and_dump();
     pid = fork();
     switch (pid) {

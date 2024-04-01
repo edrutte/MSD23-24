@@ -2,22 +2,18 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "../MFRC630/mfrc630.h"
+#include "pi_gpio.h"
 #include "pi_rfid.h"
 #include "pi_spi.h"
 
 static int rfid_fd = -1;
 
 void mfrc630_SPI_select() {
-	rfid_fd = open(pi_spi_device, O_RDWR);
-	if (rfid_fd < 0) {
-		perror("open");
-		return;
-	}
+	digitalWrite(10, LOW);
 }
 
 void mfrc630_SPI_unselect() {
-	close(rfid_fd);
-	rfid_fd = -1;
+	digitalWrite(10, HIGH);
 }
 
 void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
@@ -25,6 +21,13 @@ void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
 }
 
 void init_rfid() {
+	rfid_fd = open(pi_spi_device, O_RDWR);
+	if (rfid_fd < 0) {
+		perror("open");
+		return;
+	}
+	pinMode(10, OUTPUT);
+	digitalWrite(10, HIGH);
 	mfrc630_AN1102_recommended_registers(MFRC630_PROTO_ISO14443A_106_MILLER_MANCHESTER);
 }
 
@@ -52,4 +55,6 @@ void debug_block_until_tag_and_dump() {
 			}
 		}
 	}
+	close(rfid_fd);
+	rfid_fd = -1;
 }
