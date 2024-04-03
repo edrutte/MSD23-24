@@ -11,7 +11,9 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 #include "main.h"
+#include "lcd_i2c.h"
 #include "pi_gpio.h"
+#include "pi_i2c.h"
 #include "pi_rfid.h"
 #include "pi_spi.h"
 
@@ -57,6 +59,9 @@ int main(int argc, char* argv[]) {
 	    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdin_pipefd[1]);
     }
 	wiringPiSetup();
+	int i2c_fd = init_i2c(0, 0x27);
+	lcd_init(i2c_fd);
+	lcd_putc(i2c_fd, '!');
 	debug_block_until_tag_and_dump();
     pid = fork();
     switch (pid) {
