@@ -22,6 +22,7 @@ int main() {
     std::string bestmove;
     std::string ponder;
 
+    std::string all_moves = "";
 
     // Stockfish
     int pipe_in[2]; // Pipe for writing to child process
@@ -162,8 +163,10 @@ int main() {
                         board.makeMove(move);
 
                         // Send the updated board to Stockfish
-                        std::string fen = board.getFen();
-                        std::string command = "position fen " + fen;
+                        // std::string fen = board.getFen();
+                        // std::string command = "position fen " + fen;
+                        all_moves.append(" " + input.substr(1));
+                        std::string command = "position startpos moves" + all_moves;
                         std::cout << command << std::endl;
 
                         write(pipe_in[1], command.c_str(), command.size());
@@ -251,20 +254,77 @@ int main() {
                     board.makeMove(move);
 
                     // Send the updated board to Stockfish
-                    std::string fen = board.getFen();
-                    std::string command = "position fen " + fen; // + " moves " + ponder;
+                    // std::string fen = board.getFen();
+                    // std::string command = "position fen " + fen; // + " moves " + ponder;
+                    all_moves.append(" " + bestmove);
+                    std::string command = "position startpos moves" + all_moves;
                     std::cout << command << std::endl;
-                    
                     write(pipe_in[1], command.c_str(), command.size());
                     write(pipe_in[1], "\n", 1);
 
                     command = "d";
                     write(pipe_in[1], command.c_str(), command.size());
                     write(pipe_in[1], "\n", 1);
+                    
+                    auto gameState = board.isGameOver();
+                    if (gameState.second == GameResult::NONE) {
+                        command = "go movetime 100";
+                        write(pipe_in[1], command.c_str(), command.size());
+                        write(pipe_in[1], "\n", 1);
+                    } else {
+                        std::cout << "Game over. ";
+                        Color whosMove = board.sideToMove();
 
-                    command = "go movetime 50";
-                    write(pipe_in[1], command.c_str(), command.size());
-                    write(pipe_in[1], "\n", 1);
+                        switch (gameState.second) {
+                            case GameResult::WIN:
+                                if (whosMove == Color::WHITE) {
+                                    std::cout << "White won ";
+                                } else {
+                                    std::cout << "Black won ";
+                                }
+                                break;
+                            case GameResult::LOSE:
+                                if (whosMove == Color::WHITE) {
+                                    std::cout << "Black won ";
+                                } else {
+                                    std::cout << "White won ";
+                                }
+                                break;
+                            case GameResult::DRAW:
+                                std::cout << "Draw ";
+                                break;
+                            default:
+                                std::cerr << "Game not over." << std::endl; 
+                                return 1;
+                        }
+                        
+                        switch (gameState.first) {
+                            case GameResultReason::CHECKMATE:
+                                std::cout << "by checkmate!" << std::endl;                                break;
+                                break;
+                            case GameResultReason::STALEMATE:
+                                std::cout << "by stalemate!" << std::endl;                                break;
+                                break;
+                            case GameResultReason::INSUFFICIENT_MATERIAL:
+                                std::cout << "by insufficient material!" << std::endl;                                break;
+                                break;
+                            case GameResultReason::FIFTY_MOVE_RULE:
+                                std::cout << "by fifty move rule!" << std::endl;                                break;
+                                break;
+                            case GameResultReason::THREEFOLD_REPETITION:
+                                std::cout << "by threefold repetition!" << std::endl;                                break;
+                                break;
+                            default:
+                                std::cerr << "Game not over." << std::endl; 
+                                return 1;
+                        }
+                            
+                        // Close stockfish
+                        command = "quit";
+                        write(pipe_in[1], command.c_str(), command.size());
+                        write(pipe_in[1], "\n", 1);
+                        break;
+                    }
                 }
             }
 

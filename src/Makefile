@@ -851,7 +851,7 @@ format:
 	$(CLANG-FORMAT) -i $(SRCS) $(HEADERS) -style=file
 
 folder:
-	@mkdir $(BUILD_LOC)
+	@mkdir -p $(BUILD_LOC)
 
 # default target
 default:
