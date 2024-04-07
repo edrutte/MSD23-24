@@ -4,3 +4,6 @@
 [submodule "src/MFRC630"]
 	path = src/MFRC630
 	url = https://github.com/iwanders/MFRC630.git
+[submodule "src/chess-library"]
+	path = src/chess-library
+	url = https://github.com/Disservin/chess-library.git

@@ -2,25 +2,23 @@
 
 ## Requirements
 
-* CMake
 * Make
-* GCC/Clang
-* Ninja (optional, but recommended)
-* Ccache (optional, but recommended)
+* GCC
 * [wiringPi](https://github.com/WiringPi/WiringPi)
 
 ## Clone Stockfish submodule
 
 ```
 git submodule update --init
-cd Stockfish
-git apply ../suppress_stockfish_info.patch
+cd Stockfish/src
+make clean
+make -j build ARCH=armv8-dotprod EXTRACXXFLAGS=-mcpu=cortex-a76
+cd ../..
 ```
 
 ## Setting up the build
 
 ```
-mkdir -p build && cd build
-cmake .. -GNinja -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-ninja
+make clean
+make -j build ARCH=armv8-dotprod EXTRACXXFLAGS="-mcpu=cortex-a76 -fexceptions"
 ```
