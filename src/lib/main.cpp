@@ -9,14 +9,80 @@
 #include <ctime>
 #include <cstring>
 
-
 #include "../chess-library/include/chess.hpp"
 
 using namespace chess;
 
+void displayOutput(std::string* output) {
+    std::cout << *output << std::endl;
+}
+
+void printToStockfish(int* pipe_in, std::string* command) {
+    command->append("\n");
+    write(pipe_in[1], command->c_str(), command->size());
+}
+
+int checkGameState(Board* board, int* pipe_in) {
+    std::string command;
+    std::string output = "";
+    auto gameState = board->isGameOver();
+    if (gameState.second != GameResult::NONE) {
+        output.append("Game over. ");
+        Color whosMove = board->sideToMove();
+
+        switch (gameState.second) {
+            case GameResult::WIN:
+                if (whosMove == Color::WHITE) {
+                    output.append("White won ");
+                } else {
+                    output.append("Black won ");
+                }
+                break;
+            case GameResult::LOSE:
+                if (whosMove == Color::WHITE) {
+                    output.append("Black won ");
+                } else {
+                    output.append("White won ");
+                }
+                break;
+            case GameResult::DRAW:
+                output.append("Draw ");
+                break;
+            default:
+                output.assign("ERROR: GNO.");
+                displayOutput(&output);
+                return -1;
+        }
+    
+        switch (gameState.first) {
+            case GameResultReason::CHECKMATE:
+                output.append("by checkmate!");
+                break;
+            case GameResultReason::STALEMATE:
+                output.append("by stalemate!");
+                break;
+            case GameResultReason::INSUFFICIENT_MATERIAL:
+                output.append("by insufficient material!");
+                break;
+            case GameResultReason::FIFTY_MOVE_RULE:
+                output.append("by fifty move rule!");
+                break;
+            case GameResultReason::THREEFOLD_REPETITION:
+                output.append("by threefold repetition!");
+                break;
+            default:
+                output.assign("ERROR: GNO.");
+                displayOutput(&output);
+                return -1;
+        }
+        displayOutput(&output);
+        return 1;
+    }
+    return 0;
+}
+
 int main() {
     Board board = Board(constants::STARTPOS);
-
     Movelist moves;
 
     std::string bestmove;
@@ -33,15 +99,17 @@ int main() {
 
     // Create pipes
     if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
-        std::cerr << "Pipe creation failed.\n";
-        return 1;
+        std::string output = "ERROR: Pipe creation failed.";
+        displayOutput(&output);
+        return -1;
     }
 
     // Fork the process
     pid = fork();
     if (pid < 0) {
-        std::cerr << "Fork failed.\n";
-        return 1;
+        std::string output = "ERROR: Fork failed.";
+        displayOutput(&output);
+        return -1;
     }
 
     if (pid == 0) { // Child process
@@ -62,8 +130,9 @@ int main() {
         execve(argv[0], argv, nullptr);
 
         // execve should not return if successful, if it does, an error occurred
-        std::cerr << "Execve failed.\n";
-        return 1;
+        std::string output = "ERROR: Execve failed.";
+        displayOutput(&output);
+        return -1;
     } else { // Parent process
         // Close unused ends of the pipes
         close(pipe_in[0]);
@@ -77,10 +146,9 @@ int main() {
         fds[1].events = POLLIN;
         
         // Send "uci" and "ucinewgame" to the child process
-        const std::vector<std::string> commands = {"uci", "setoption name Threads value 4", "isready"};
-        for (const auto& command : commands) {
-            write(pipe_in[1], command.c_str(), command.size());
-            write(pipe_in[1], "\n", 1);
+        std::vector<std::string> commands = {"uci", "setoption name Threads value 4", "isready"};
+        for (auto& command : commands) {
+            printToStockfish(pipe_in, &command);
         }
 
         // Initialize the start time
@@ -94,22 +162,25 @@ int main() {
             // Calculate elapsed time
             std::time_t elapsed_time = std::time(nullptr) - start_time;
             if (elapsed_time > READYOK_TIMEOUT) {
-                std::cerr << "Timed out waiting for 'readyok'.\n";
-                return 1;
+                std::string output = "ERROR: Stockfish timeout.";
+                displayOutput(&output);
+                return -1;
             }
 
             // Poll for input and output from child process
             if (poll(fds, 2, -1) == -1) {
-                std::cerr << "Poll failed.\n";
-                break;
+                std::string output = "ERROR: Poll failed.";
+                displayOutput(&output);
+                return -1;
             }
 
             // Check if output is available from child process
             if (fds[1].revents & POLLIN) {
                 int bytes_read = read(pipe_out[0], buffer, BUFFER_SIZE);
                 if (bytes_read <= 0) {
-                    std::cerr << "Error reading from child process.\n";
-                    break;
+                    std::string output = "ERROR: No read child.";
+                    displayOutput(&output);
+                    return -1;
                 }
                 // Output received from child process
                 // Check if "readyok" is received
@@ -122,18 +193,21 @@ int main() {
             // Check if child process has terminated
             int status;
             if (waitpid(pid, &status, WNOHANG) == pid) {
-                std::cerr << "Child process terminated unexpectedly.\n";
-                return 1;
+                std::string output = "ERROR: Stockfish closed.";
+                displayOutput(&output);
+                return -1;
             }
         }
         
-        std::cout << "Stockfish is ready." << std::endl;
+        std::string output = "Stockfish is ready.";
+        displayOutput(&output);
 
         while (true) { // Continue indefinitely until an error or termination occurs
             // Poll for input from stdin and output from child process with a timeout
             if (poll(fds, 2, -1) == -1) {
-                std::cerr << "Poll failed.\n";
-                break;
+                std::string output = "ERROR: Poll failed.";
+                displayOutput(&output);
+                return -1;
             }
 
             // Check if input is available from stdin
@@ -158,6 +232,8 @@ int main() {
                     // Check to make sure our move is in that list of moves
                     if (moves.find(move) < 0) {
                         std::cout << "Invalid move." << std::endl;
+                        std::string output = "Invalid move.";
+                        displayOutput(&output);
                     } else {
                         // Make the move on the board
                         board.makeMove(move);
@@ -168,19 +244,14 @@ int main() {
                         all_moves.append(" " + input.substr(1));
                         std::string command = "position startpos moves" + all_moves;
                         std::cout << command << std::endl;
-
-                        write(pipe_in[1], command.c_str(), command.size());
-                        write(pipe_in[1], "\n", 1);
+                        printToStockfish(pipe_in, &command);
                         
                         command = "go movetime 100";
-
-                        write(pipe_in[1], command.c_str(), command.size());
-                        write(pipe_in[1], "\n", 1);
+                        printToStockfish(pipe_in, &command);
                     }
                 } else {
                     // Write to the child process
-                    write(pipe_in[1], input.c_str(), input.size());
-                    write(pipe_in[1], "\n", 1);
+                    printToStockfish(pipe_in, &input);
                 }
 
             }
@@ -189,8 +260,10 @@ int main() {
             if (fds[1].revents & POLLIN) {
                 int bytes_read = read(pipe_out[0], buffer, BUFFER_SIZE);
                 if (bytes_read <= 0) {
-                    std::cerr << "Error reading from child process.\n";
-                    break;
+                    std::cerr << "Error reading from child process." << std::endl;
+                    std::string output = "ERROR: No read child.";
+                    displayOutput(&output);
+                    return -1;
                 }
                 // Output received from child process
 
@@ -227,10 +300,6 @@ int main() {
                     if (newlinePos != std::string::npos) {
                         bufferStr = bufferStr.substr(0, newlinePos);
                     }
-                    if (bufferStr.length() > 26) { // TODO: remove
-                        std::cout << "ITS HAPPENING: " << bufferStr << std::endl;
-                        return 0;
-                    }
 
                     // Get the best move and ponder move
                     std::istringstream iss(bufferStr);
@@ -259,71 +328,24 @@ int main() {
                     all_moves.append(" " + bestmove);
                     std::string command = "position startpos moves" + all_moves;
                     std::cout << command << std::endl;
-                    write(pipe_in[1], command.c_str(), command.size());
-                    write(pipe_in[1], "\n", 1);
+                    printToStockfish(pipe_in, &command);
 
                     command = "d";
-                    write(pipe_in[1], command.c_str(), command.size());
-                    write(pipe_in[1], "\n", 1);
+                    printToStockfish(pipe_in, &command);
                     
-                    auto gameState = board.isGameOver();
-                    if (gameState.second == GameResult::NONE) {
-                        command = "go movetime 100";
-                        write(pipe_in[1], command.c_str(), command.size());
-                        write(pipe_in[1], "\n", 1);
-                    } else {
-                        std::cout << "Game over. ";
-                        Color whosMove = board.sideToMove();
-
-                        switch (gameState.second) {
-                            case GameResult::WIN:
-                                if (whosMove == Color::WHITE) {
-                                    std::cout << "White won ";
-                                } else {
-                                    std::cout << "Black won ";
-                                }
-                                break;
-                            case GameResult::LOSE:
-                                if (whosMove == Color::WHITE) {
-                                    std::cout << "Black won ";
-                                } else {
-                                    std::cout << "White won ";
-                                }
-                                break;
-                            case GameResult::DRAW:
-                                std::cout << "Draw ";
-                                break;
-                            default:
-                                std::cerr << "Game not over." << std::endl; 
-                                return 1;
-                        }
-                        
-                        switch (gameState.first) {
-                            case GameResultReason::CHECKMATE:
-                                std::cout << "by checkmate!" << std::endl;                                break;
-                                break;
-                            case GameResultReason::STALEMATE:
-                                std::cout << "by stalemate!" << std::endl;                                break;
-                                break;
-                            case GameResultReason::INSUFFICIENT_MATERIAL:
-                                std::cout << "by insufficient material!" << std::endl;                                break;
-                                break;
-                            case GameResultReason::FIFTY_MOVE_RULE:
-                                std::cout << "by fifty move rule!" << std::endl;                                break;
-                                break;
-                            case GameResultReason::THREEFOLD_REPETITION:
-                                std::cout << "by threefold repetition!" << std::endl;                                break;
-                                break;
-                            default:
-                                std::cerr << "Game not over." << std::endl; 
-                                return 1;
-                        }
-                            
-                        // Close stockfish
-                        command = "quit";
-                        write(pipe_in[1], command.c_str(), command.size());
-                        write(pipe_in[1], "\n", 1);
-                        break;
+                    // Check end of game
+                    int endOfGame = checkGameState(&board, pipe_in);
+                    switch (endOfGame) {
+                        case 1:
+                            // Close stockfish
+                            command = "quit";
+                            printToStockfish(pipe_in, &command);
+                            return 0;
+                        case -1:
+                            return -1;
+                        default:
+                            command = "go movetime 100";
+                            printToStockfish(pipe_in, &command);
                     }
                 }
             }
@@ -332,7 +354,9 @@ int main() {
             int status;
             if (waitpid(pid, &status, WNOHANG) == pid) {
                 std::cout << "Child process terminated." << std::endl;
-                return 0;
+                std::string output = "ERROR: Stockfish closed.";
+                displayOutput(&output);
+                return -1;
             }
         }
     }
