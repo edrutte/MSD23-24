@@ -46,23 +46,28 @@ int main(int argc, char* argv[]) {
         printf("Please supply path to stockfish binary\n");
         exit(EXIT_FAILURE);
     }
-    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
-        perror("signal");
-        exit(EXIT_FAILURE);
-    }
-    if (pipe2(fish_stdin_pipefd, O_NONBLOCK) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
-    if (pipe2(fish_stdout_pipefd, O_NONBLOCK) == -1) {
-        perror("pipe");
-	    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdin_pipefd[1]);
-    }
-	wiringPiSetup();
+#ifdef __aarch64__
+	if (wiringPiSetup() == -1) {
+		fprintf(stderr, "Could not initialize gpio\n");
+		exit(EXIT_FAILURE);
+	}
 	int i2c_fd = init_i2c(0, 0x27);
 	lcd_init(i2c_fd);
 	lcd_putc(i2c_fd, '!');
 	debug_block_until_tag_and_dump();
+#endif
+    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
+        perror("signal");
+        exit(EXIT_FAILURE);
+    }
+    if (pipe2(fish_stdin_pipefd, 0) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+    if (pipe2(fish_stdout_pipefd, 0) == -1) {
+        perror("pipe");
+	    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdin_pipefd[1]);
+    }
     pid = fork();
     switch (pid) {
         case -1:
@@ -79,8 +84,10 @@ int main(int argc, char* argv[]) {
                 perror("dup");
 	            cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdout_pipefd[1]);
             }
-            execv(argv[1], fishargv);
-            perror("execv");
+		    close(fish_stdout_pipefd[1]);
+		    close(fish_stdin_pipefd[0]);
+            execle(argv[1], argv[1], NULL, NULL);
+            perror("execle");
 		    cleanup_and_die(2, fish_stdin_pipefd[0], fish_stdout_pipefd[1]);
         default:
 	        close(fish_stdout_pipefd[1]);
@@ -106,7 +113,7 @@ int main(int argc, char* argv[]) {
 			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
 	read(fish_stdout_pipefd[0], fish, PIPE_BUF);// Get rid of Stockfish intro
-    write(fish_stdin_pipefd[1], "uci", 3);
+    write(fish_stdin_pipefd[1], "uci\n", 4);
 	if (epoll_wait(epollfd, &events, 1, 500) == -1) {
 		perror("epoll_wait");
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
@@ -116,17 +123,11 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "Stockfish failed to respond\n");
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
-#ifdef __aarch64__
-	if (wiringPiSetupGpio() == -1) {
-		fprintf(stderr, "Could not initialize gpio\n");
-		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
-	}
-#endif
-	write(fish_stdin_pipefd[1], "setoption name Threads value 4", 30);
-	write(fish_stdin_pipefd[1], "setoption name Ponder value true", 32);
-	write(fish_stdin_pipefd[1], "ucinewgame", 10);
+	write(fish_stdin_pipefd[1], "setoption name Threads value 4\n", 31);
+	write(fish_stdin_pipefd[1], "setoption name Ponder value true\n", 33);
+	write(fish_stdin_pipefd[1], "ucinewgame\n", 11);
 	// TODO: Extract into a stockfish_isready function
-	write(fish_stdin_pipefd[1], "isready", 7);
+	write(fish_stdin_pipefd[1], "isready\n", 8);
 	switch (epoll_wait(epollfd, &events, 1, 5000)) {
 		case -1:
 			perror("epoll_wait");
@@ -141,7 +142,7 @@ int main(int argc, char* argv[]) {
 		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
 	}
 	// End TODO
-	write(fish_stdin_pipefd[1], "position startpos", 17);
+	write(fish_stdin_pipefd[1], "position startpos\n", 18);
 	close(fish_stdin_pipefd[1]);
 	close(fish_stdout_pipefd[0]);
 	// Maybe call wait()
