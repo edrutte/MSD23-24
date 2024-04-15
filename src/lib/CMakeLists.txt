@@ -1,5 +1,5 @@
 include_directories(${CMAKE_SOURCE_DIR}/include)
-add_executable(main ../MFRC630/mfrc630.c main.c lcd_i2c.c pi_rfid.c pi_spi.c pi_i2c.c stepper.c)
+add_executable(main Adafruit_MFRC630_consts.c Adafruit_MFRC630.cpp main.c lcd_i2c.c pi_rfid.cpp pi_spi.c pi_i2c.c stepper.c)
 add_dependencies(main Stockfish)
 #Inspired by https://github.com/axr/solar-cmake/blob/master/TargetArch.cmake
 set(armdetect_c_code "

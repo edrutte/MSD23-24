@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "Could not initialize gpio\n");
 		exit(EXIT_FAILURE);
 	}
-	int i2c_fd = init_i2c(0, 0x27);
+	int i2c_fd = init_i2c(11, 0x27);
 	lcd_init(i2c_fd);
 	lcd_putc(i2c_fd, '!');
 	debug_block_until_tag_and_dump();

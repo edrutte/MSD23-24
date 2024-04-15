@@ -1,0 +1,1024 @@
+/*!
+ * @file Adafruit_MFRC630.cpp
+ *
+ * @mainpage Adafruit MFRC630 Library
+ *
+ * @section intro_sec Introduction
+ *
+ * This is a library for the Adafruit MFRC630 Breakout
+ *
+ * Designed specifically to work with the Adafruit MFRC630 Breakout:
+ * http://www.adafruit.com/products/xxx
+ *
+ * These boards use I2C to communicate, 2 pins are required to interface.
+ *
+ * Adafruit invests time and resources providing this open source code,
+ * please support Adafruit andopen-source hardware by purchasing products
+ * from Adafruit!
+ *
+ * @section author Author
+ *
+ * Written by Kevin Townsend for Adafruit Industries.
+ *
+ * @section license License
+ *
+ * BSD license, all text above must be included in any redistribution
+ *
+ * Modified for use with Raspberry Pi by Evan Ruttenberg
+ */
+
+#include "Adafruit_MFRC630.h"
+
+/***************************************************************************
+ PRIVATE FUNCTIONS
+ ***************************************************************************/
+static uint8_t rev8_lookup[16] = {0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
+                                        0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf};
+
+/*!
+ * @brief Uses the lookup table above to reverse a single byte.
+ * @param n Input byte
+ * @return uint8_t. A byte
+ */
+uint8_t reverse8(uint8_t n) {
+	return (rev8_lookup[n & 0b1111] << 4) | rev8_lookup[n >> 4];
+}
+
+/**************************************************************************/
+/*!
+    @brief  Write a byte to the specified register
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::write8(uint8_t reg, uint8_t value) {
+	digitalWrite(_cs, LOW);
+	uint8_t tx[] = {(reg << 1) | 0x00, value};
+	uint8_t rx[10];
+	send_spi(_fd, tx, rx, 2);
+	digitalWrite(_cs, HIGH);
+}
+#define HEX 0
+/**************************************************************************/
+/*!
+    @brief  Write a buffer to the specified register
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::writeBuffer(uint8_t reg, uint16_t len, uint8_t *buffer) {
+	digitalWrite(10, LOW);
+	uint8_t tx[] = {(reg << 1) | 0x00};
+	uint8_t rx[10];
+	send_spi(_fd, tx, rx, 1);
+	send_spi(_fd, buffer, rx, (size_t) len);
+	digitalWrite(10, HIGH);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Read a byte from the specified register
+*/
+/**************************************************************************/
+uint8_t Adafruit_MFRC630::read8(uint8_t reg) {
+	uint8_t resp = 0;
+	uint8_t tx[2] = {0};
+	uint8_t rx[2] = {0};
+	uint8_t timeout = 0xFF;
+
+	digitalWrite(_cs, LOW);
+	tx[0] = (reg << 1) | 0x01;
+	tx[1] = 0;
+	send_spi(_fd, tx, rx, 2);
+	digitalWrite(_cs, HIGH);
+	resp = rx[1];
+	return resp;
+}
+
+/***************************************************************************
+ CONSTRUCTOR
+ ***************************************************************************/
+
+/**************************************************************************/
+/*!
+    @brief  Instantiates a new instance of the Adafruit_MFRC630 class
+            using the SPI bus.
+*/
+/**************************************************************************/
+Adafruit_MFRC630::Adafruit_MFRC630(int fd, uint8_t cs,
+                                   int8_t pdown_pin) {
+
+	/* Set the PDOWN pin */
+	_pdown = pdown_pin;
+	_fd = fd;
+	/* Set the CS/SSEL pin */
+	_cs = cs;
+	wiringPiSetup();
+	pinMode(10, OUTPUT);
+}
+
+/***************************************************************************
+ PUBLIC FUNCTIONS
+ ***************************************************************************/
+
+/**************************************************************************/
+/*!
+    @brief  Sets up the HW
+*/
+/**************************************************************************/
+bool Adafruit_MFRC630::begin() {
+	digitalWrite(_cs, HIGH);
+
+	/* Reset the MFRC630 if possible */
+	if (_pdown != -1) {
+		pinMode(_pdown, OUTPUT);
+		digitalWrite(_pdown, HIGH);
+		delay(5);
+		digitalWrite(_pdown, LOW);
+		delay(5);
+		digitalWrite(_pdown, HIGH);
+		delay(5);
+		digitalWrite(_pdown, LOW);
+		/* Typical 2.5ms startup delay */
+		delay(100);
+	}
+
+	/* Check device ID for bus response */
+
+	/* Read the VERSION register */
+	uint8_t ver = read8(MFRC630_REG_VERSION);
+
+	/* If ver == 0xFF or 0x0 likely a bus failure */
+	if ((ver == 0xFF) || (ver == 0)) {
+		return false;
+	}
+
+	/* If !1.8, there was a problem */
+	if (ver != 0x1A) {
+		return false;
+	}
+
+	return true;
+}
+
+/**************************************************************************/
+/*!
+    @brief  Determines the number of bytes in the HW FIFO buffer (max 512)
+
+    @returns The number of bytes available in the HW FIFO buffer
+*/
+/**************************************************************************/
+int16_t Adafruit_MFRC630::readFIFOLen(void) {
+
+  /* Give FIFO a chance to fill up. */
+  /* TODO: Why do we need a delay between reads?!? */
+  delay(10);
+
+  /* Read the MFRC630_REG_FIFO_LENGTH register */
+  /* In 512 byte mode, the upper two bits are stored in FIFO_CONTROL */
+  uint8_t hi = read8(MFRC630_REG_FIFO_CONTROL);
+  uint8_t lo = read8(MFRC630_REG_FIFO_LENGTH);
+
+  /* Determine len based on FIFO size (255 byte or 512 byte mode) */
+  int16_t l = (hi & 0x80) ? lo : (((hi & 0x3) << 8) | lo);
+
+  return l;
+}
+
+/**************************************************************************/
+/*!
+    @brief  Read 'len' bytes from the HW FIFO buffer (max 512 bytes)
+
+    @returns The number of bytes read from the FIFO, or -1 if an error occured.
+*/
+/**************************************************************************/
+int16_t Adafruit_MFRC630::readFIFO(uint16_t len, uint8_t *buffer) {
+  int16_t counter = 0;
+
+  /* Check for 512 byte overflow */
+  if (len > 512) {
+    return -1;
+  }
+
+  /* Read len bytes from the FIFO */
+  for (uint16_t i = 0; i < len; i++) {
+    buffer[i] = read8(MFRC630_REG_FIFO_DATA);
+    counter++;
+  }
+
+  return counter;
+}
+
+/**************************************************************************/
+/*!
+    @brief  Writes the specified number of bytes to the HW FIFO
+
+    @returns The number of bytes written to the FIFO, -1 if an error occured.
+*/
+/**************************************************************************/
+int16_t Adafruit_MFRC630::writeFIFO(uint16_t len, uint8_t *buffer) {
+  int counter = 0;
+
+  /* Check for 512 byte overflow */
+  if (len > 512) {
+    return -1;
+  }
+
+  /* Write len bytes to the FIFO */
+  for (uint16_t i = 0; i < len; i++) {
+    write8(MFRC630_REG_FIFO_DATA, buffer[i]);
+    counter++;
+  }
+
+  return counter;
+}
+
+/**************************************************************************/
+/*!
+    @brief  Flushes the contents of the FIFo buffer
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::clearFIFO(void) {
+  uint8_t ctrl = read8(MFRC630_REG_FIFO_CONTROL);
+  write8(MFRC630_REG_FIFO_CONTROL, ctrl | (1 << 4));
+}
+
+/**************************************************************************/
+/*!
+    @brief  Writes a parameter-less command to the internal state machine
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::writeCommand(uint8_t command) {
+  uint8_t buff[1] = {command};
+
+  writeBuffer(MFRC630_REG_COMMAND, 1, buff);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Writes a parameterised command to the internal state machine
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::writeCommand(uint8_t command, uint8_t paramlen,
+                                    uint8_t *params) {
+  /* Arguments and/or data necessary to process a command are exchanged via
+     the FIFO buffer:
+
+     - Each command that needs a certain number of arguments will start
+       processing only when it has received the correct number of arguments
+       via the FIFO buffer.
+     - The FIFO buffer is not cleared automatically at command start. It is
+       recommended to write the command arguments and/or the data bytes into
+       the FIFO buffer and start the command afterwards.
+     - Each command may be stopped by the host by writing a new command code
+       into the command register e.g.: the Idle-Command. */
+
+  /* Cancel any current command. */
+  write8(MFRC630_REG_COMMAND, MFRC630_CMD_IDLE);
+
+  /* Flush the FIFO */
+  clearFIFO();
+
+  /* Write data to the FIFO */
+  writeFIFO(paramlen, params);
+
+  /* Send the command */
+  write8(MFRC630_REG_COMMAND, command);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Gets the three bit COM status for the IC
+*/
+/**************************************************************************/
+uint8_t Adafruit_MFRC630::getComStatus(void) {
+  return (read8(MFRC630_REG_STATUS) & 0b111);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Performs a soft reset of the IC
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::softReset(void) {
+  writeCommand(MFRC630_CMD_SOFTRESET);
+  delay(100);
+}
+
+/**************************************************************************/
+/*!
+    @brief  Prints out n bytes of hex data.
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::printHex(uint8_t *buf, size_t len) {
+}
+
+/**************************************************************************/
+/*!
+    @brief  Prints a human readable error code.
+*/
+/**************************************************************************/
+void Adafruit_MFRC630::printError(enum mfrc630errors err) {
+}
+
+/**************************************************************************/
+/*!
+    @brief  Configures the radio for the specified protocol
+*/
+/**************************************************************************/
+bool Adafruit_MFRC630::configRadio(mfrc630radiocfg cfg) {
+  switch (cfg) {
+  case MFRC630_RADIOCFG_ISO1443A_106:
+    writeBuffer(MFRC630_REG_DRV_MOD, sizeof(antcfg_iso14443a_106),
+                antcfg_iso14443a_106);
+
+    write8(MFRC630_REG_DRV_MOD, 0x8E); /* Driver mode register */
+
+    write8(MFRC630_REG_TX_AMP, 0x12); /* Transmiter amplifier register */
+
+    write8(MFRC630_REG_DRV_CON, 0x39); /* Driver configuration register */
+
+    write8(MFRC630_REG_TXL, 0x06); /* Transmitter register */
+    break;
+  default:
+    return false;
+    break;
+  }
+
+  return true;
+}
+
+uint16_t Adafruit_MFRC630::iso14443aRequest(void) {
+  return iso14443aCommand(ISO14443_CMD_REQA);
+}
+
+uint16_t Adafruit_MFRC630::iso14443aWakeup(void) {
+  return iso14443aCommand(ISO14443_CMD_WUPA);
+}
+
+uint16_t Adafruit_MFRC630::iso14443aCommand(enum iso14443_cmd cmd) {
+  uint16_t atqa = 0; /* Answer to request (2 bytes). */
+
+  /* Cancel any current command */
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Flush the FIFO */
+  clearFIFO();
+
+  /*
+   * Define the number of bits from the last byte should be sent. 000 means
+   * that all bits of the last data byte are sent, 1..7 causes the specified
+   * number of bits to be sent. Also set the DataEn bit to enable data xfer.
+   */
+  write8(MFRC630_REG_TX_DATA_NUM, 0x07 | (1 << 3));
+
+  /* Disable CRC. */
+  write8(MFRC630_REG_TX_CRC_PRESET, 0x18);
+  write8(MFRC630_REG_RX_CRC_CON, 0x18);
+
+  /* Clear the receiver control register. */
+  write8(MFRC630_REG_RX_BIT_CTRL, 0);
+
+  /* Clear the interrupts. */
+  write8(MFRC630_REG_IRQ0, 0b01111111);
+  write8(MFRC630_REG_IRQ1, 0b00111111);
+  /* Allow the receiver and Error IRQs to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQOEN, MFRC630IRQ0_RXIRQ | MFRC630IRQ0_ERRIRQ);
+  /* Allow Timer0 IRQ to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQ1EN, MFRC630IRQ1_TIMER0IRQ);
+
+  /* Configure the frame wait timeout using T0 (5ms max). */
+  write8(MFRC630_REG_T0_CONTROL, 0b10001);
+  write8(MFRC630_REG_T0_RELOAD_HI, 1100 >> 8);
+  write8(MFRC630_REG_TO_RELOAD_LO, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_HI, 1100 >> 8);
+  write8(MFRC630_REG_T0_COUNTER_VAL_LO, 0xFF);
+
+  /* Send the ISO14443 command. */
+  uint8_t send_req[] = {(uint8_t)cmd};
+  writeCommand(MFRC630_CMD_TRANSCEIVE, 1, send_req);
+
+  /* Wait here until we're done reading, get an error, or timeout. */
+  /* TODO: Update to use timeout parameter! */
+  uint8_t irqval = 0;
+  while (!(irqval & MFRC630IRQ1_TIMER0IRQ)) {
+    irqval = read8(MFRC630_REG_IRQ1);
+    /* Check for a global interrrupt, which can only be ERR or RX. */
+    if (irqval & MFRC630IRQ1_GLOBALIRQ) {
+      break;
+    }
+  }
+
+  /* Cancel the current command (in case we timed out or error occurred). */
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Check the RX IRQ, and exit appropriately if it has fired (error). */
+  irqval = read8(MFRC630_REG_IRQ0);
+  if ((!(irqval & MFRC630IRQ0_RXIRQ) || (irqval & MFRC630IRQ0_ERRIRQ))) {
+    /* Display the error message if ERROR IRQ is set. */
+    if (irqval & MFRC630IRQ0_ERRIRQ) {
+      uint8_t error = read8(MFRC630_REG_ERROR);
+      /* Only display the error if it isn't a timeout. */
+      if (error) {
+        printError((enum mfrc630errors)error);
+      }
+    }
+    return 0;
+  }
+
+  /* Read the response */
+  uint16_t rxlen = readFIFOLen();
+  if (rxlen == 2) {
+    /*
+     * If we have 2 bytes for the response, it's the ATQA.
+     *
+     * See ISO14443-3 6.3.2 for help in interpretting the ATQA value.
+     *
+     * "After a REQA Command is transmitted by the PCD, all
+     * PICCs in the IDLE State shall respond synchronously with ATQA."
+     *
+     * 0x44 = 4 bit frame anticollision
+     *        UID size = double
+     */
+    readFIFO(rxlen, (uint8_t *)&atqa);
+    return atqa;
+  }
+
+  return 0;
+}
+
+/*
+ * For high level details on the selection and anti-collision protocols see
+ * "Chip Type Identification Procedure" in
+ * https://www.nxp.com/docs/en/application-note/AN10833.pdf
+ */
+uint8_t Adafruit_MFRC630::iso14443aSelect(uint8_t *uid, uint8_t *sak) {
+  (void)sak;
+
+  /* Cancel any current command */
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Flush the FIFO */
+  clearFIFO();
+
+  /* Allow the receiver and Error IRQs to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQOEN, MFRC630IRQ0_RXIRQ | MFRC630IRQ0_ERRIRQ);
+
+  /* Allow Timer0 IRQ to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQ1EN, MFRC630IRQ1_TIMER0IRQ);
+
+  /* Configure the frame wait timeout using T0 (5ms max). */
+  /* 1 'tick' 4.72us, so 1100 = 5.2ms */
+  write8(MFRC630_REG_T0_CONTROL, 0b10001);
+  write8(MFRC630_REG_T0_RELOAD_HI, 1100 >> 8);
+  write8(MFRC630_REG_TO_RELOAD_LO, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_HI, 1100 >> 8);
+  write8(MFRC630_REG_T0_COUNTER_VAL_LO, 0xFF);
+
+  /* Set the cascade level (collision detection loop) */
+  uint8_t cascadelvl;
+  for (cascadelvl = 1; cascadelvl <= 3; cascadelvl++) {
+    uint8_t cmd;
+    uint8_t kbits = 0;                        /* Bits known in UID so far. */
+    uint8_t send_req[7] = {0};                /* TX buffer */
+    uint8_t *uid_this_level = &(send_req[2]); /* UID pointer */
+    uint8_t message_length;
+
+    switch (cascadelvl) {
+    case 1:
+      cmd = ISO14443_CAS_LEVEL_1;
+      break;
+    case 2:
+      cmd = ISO14443_CAS_LEVEL_2;
+      break;
+    case 3:
+      cmd = ISO14443_CAS_LEVEL_3;
+      break;
+    }
+
+    /* Disable CRC. */
+    write8(MFRC630_REG_TX_CRC_PRESET, 0x18);
+    write8(MFRC630_REG_RX_CRC_CON, 0x18);
+
+    /* As per ISO14443-3, limit coliision checks to 32 attempts. */
+    uint8_t cnum;
+    for (cnum = 0; cnum < 32; cnum++) {
+      printHex(uid_this_level, (kbits + 8 - 1) / 8);
+
+      /* Clear the interrupts. */
+      write8(MFRC630_REG_IRQ0, 0b01111111);
+      write8(MFRC630_REG_IRQ1, 0b00111111);
+
+      /* Send the current collision level command */
+      send_req[0] = cmd;
+      send_req[1] = 0x20 + kbits;
+
+      /* Limit MFRC630_REG_TX_DATA_NUM to the correct number of bits. */
+      write8(MFRC630_REG_TX_DATA_NUM, (kbits % 8) | (1 << 3));
+
+      // ValuesAfterColl: If cleared, every received bit after a collision is
+      // replaced by a zero. This function is needed for ISO/IEC14443
+      // anticollision (0<<7). We want to shift the bits with RxAlign
+      uint8_t rxalign = kbits % 8;
+      write8(MFRC630_REG_RX_BIT_CTRL, (0 << 7) | (rxalign << 4));
+
+      /* Determine the message length */
+      if ((kbits % 8) == 0) {
+        message_length = ((kbits / 8)) + 2;
+      } else {
+        message_length = ((kbits / 8) + 1) + 2;
+      }
+
+      /* Send the command. */
+      writeCommand(MFRC630_CMD_TRANSCEIVE, message_length, send_req);
+
+      /* Wait until the command execution is complete. */
+      uint8_t irq1_value = 0;
+      while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+        irq1_value = read8(MFRC630_REG_IRQ1);
+        /* Check for a global interrrupt, which can only be ERR or RX. */
+        if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+          break;
+        }
+      }
+
+      /* Cancel any current command */
+      writeCommand(MFRC630_CMD_IDLE);
+
+      /* Parse results */
+      uint8_t irq0_value = read8(MFRC630_REG_IRQ0);
+      uint8_t error = read8(MFRC630_REG_ERROR);
+      uint8_t coll = read8(MFRC630_REG_RX_COLL);
+      uint8_t coll_p = 0;
+
+      /* Check if an error occured */
+      if (irq0_value & MFRC630IRQ0_ERRIRQ) {
+        /* Display the error code in human-readable format. */
+        printError((enum mfrc630errors)error);
+        if (error & MFRC630_ERROR_COLLDET) {
+          /* Collision error, check if the collision position is valid */
+          if (coll & (1 << 7)) {
+            /* Valid, so check the collision position (bottom 7 bits). */
+            coll_p = coll & (~(1 << 7));
+
+            uint8_t choice_pos = kbits + coll_p;
+            uint8_t selection =
+                (uid[((choice_pos + (cascadelvl - 1) * 3) / 8)] >>
+                 ((choice_pos) % 8)) &
+                1;
+            uid_this_level[((choice_pos) / 8)] |= selection
+                                                  << ((choice_pos) % 8);
+            kbits++;
+
+            printHex(uid_this_level, 10);
+          } else {
+            /* Invalid collision position (bit 7 = 0) */
+            coll_p = 0x20 - kbits;
+          } /* End: if (coll & (1 << 7)) */
+        } else {
+          coll_p = 0x20 - kbits;
+        } /* End: if (error & MFRC630_ERROR_COLLDET) */
+      } else if (irq0_value & MFRC630IRQ0_RXIRQ) {
+        /* We have data and no collision, all is well in the world! */
+        coll_p = 0x20 - kbits;
+      } else {
+        /* Probably no card */
+        return 0;
+      } /* End: if (irq0_value & (1 << 1)) */
+
+      /* Read the UID so far */
+      uint16_t rxlen = readFIFOLen();
+      uint8_t buf[5]; /* UID = 4 bytes + BCC */
+      readFIFO(rxlen < 5 ? rxlen : 5, buf);
+
+      /*
+       * Move current buffer contents into the UID placeholder, OR'ing the
+       * results so that we don't lose the bit we set if you have a collision.
+       */
+      uint8_t rbx;
+      for (rbx = 0; (rbx < rxlen); rbx++) {
+        uid_this_level[(kbits / 8) + rbx] |= buf[rbx];
+      }
+      kbits += coll_p;
+
+      if ((kbits >= 32)) {
+        printHex(uid_this_level, kbits / 8);
+        break; /* Exit the collision loop */
+      }
+    } /* End: for (cnum = 0; cnum < 32; cnum++) */
+
+    /* Check if the BCC matches ... */
+    uint8_t bcc_val = uid_this_level[4];
+    uint8_t bcc_calc = uid_this_level[0] ^ uid_this_level[1] ^
+                       uid_this_level[2] ^ uid_this_level[3];
+    if (bcc_val != bcc_calc) {
+      return 0;
+    }
+
+    /* Clear the interrupts. */
+    write8(MFRC630_REG_IRQ0, 0b01111111);
+    write8(MFRC630_REG_IRQ1, 0b00111111);
+
+    send_req[0] = cmd;
+    send_req[1] = 0x70;
+    send_req[6] = bcc_calc;
+    message_length = 7;
+
+    /* Re-enable CRCs. */
+    write8(MFRC630_REG_TX_CRC_PRESET, 0x18 | 1);
+    write8(MFRC630_REG_RX_CRC_CON, 0x18 | 1);
+
+    /* Reset the TX and RX registers (disable alignment, transmit full bytes) */
+    write8(MFRC630_REG_TX_DATA_NUM, (kbits % 8) | (1 << 3));
+    uint8_t rxalign = 0;
+    write8(MFRC630_REG_RX_BIT_CTRL, (0 << 7) | (rxalign << 4));
+
+    /* Send the command. */
+    writeCommand(MFRC630_CMD_TRANSCEIVE, message_length, send_req);
+
+    /* Wait until the command execution is complete. */
+    uint8_t irq1_value = 0;
+    while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+      irq1_value = read8(MFRC630_REG_IRQ1);
+      /* Check for a global interrrupt, which can only be ERR or RX. */
+      if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+        break;
+      }
+    }
+    writeCommand(MFRC630_CMD_IDLE);
+
+    /* Check the source of exiting the loop. */
+    uint8_t irq0_value = read8(MFRC630_REG_IRQ0);
+    /* Check the ERROR IRQ */
+    if (irq0_value & MFRC630IRQ0_ERRIRQ) {
+      /* Check what kind of error. */
+      uint8_t error = read8(MFRC630_REG_ERROR);
+      if (error & MFRC630_ERROR_COLLDET) {
+        /* Collision detecttion. */
+        printError(MFRC630_ERROR_COLLDET);
+        return 0;
+      }
+    }
+
+    /* Read SAK answer from fifo. */
+    uint8_t sak_len = readFIFOLen();
+    if (sak_len != 1) {
+      return 0;
+    }
+    uint8_t sak_value;
+    readFIFO(sak_len, &sak_value);
+
+    /* Check if there is more data to read. */
+    if (sak_value & (1 << 2)) {
+      /* UID not yet complete, continue to next cascade. */
+      uint8_t UIDn;
+      for (UIDn = 0; UIDn < 3; UIDn++) {
+        // uid_this_level[UIDn] = uid_this_level[UIDn + 1];
+        uid[(cascadelvl - 1) * 3 + UIDn] = uid_this_level[UIDn + 1];
+      }
+    } else {
+      /* Done! */
+      /* Add current bytes at this level to the UID. */
+      uint8_t UIDn;
+      for (UIDn = 0; UIDn < 4; UIDn++) {
+        uid[(cascadelvl - 1) * 3 + UIDn] = uid_this_level[UIDn];
+      }
+
+      /* Finally, return the length of the UID that's now at the uid pointer. */
+      return cascadelvl * 3 + 1;
+    }
+
+  } /* End: for (cascadelvl = 1; cascadelvl <= 3; cascadelvl++) */
+
+  /* Return 0 for UUID length if nothing was found. */
+  return 0;
+}
+
+void Adafruit_MFRC630::mifareLoadKey(uint8_t *key) {
+
+  writeCommand(MFRC630_CMD_IDLE);
+  clearFIFO();
+  writeFIFO(6, key);
+  writeCommand(MFRC630_CMD_LOADKEY);
+}
+
+bool Adafruit_MFRC630::mifareAuth(uint8_t key_type, uint8_t blocknum,
+                                  uint8_t *uid) {
+  writeCommand(MFRC630_CMD_IDLE);
+  clearFIFO();
+
+  /* Allow the IDLE and Error IRQs to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQOEN, MFRC630IRQ0_IDLEIRQ | MFRC630IRQ0_ERRIRQ);
+  /* Allow Timer0 IRQ to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQ1EN, MFRC630IRQ1_TIMER0IRQ);
+
+  /* Configure the frame wait timeout using T0 (10ms max). */
+  /* 1 'tick' 4.72us, so 2000 = ~10ms */
+  write8(MFRC630_REG_T0_CONTROL, 0b10001);
+  write8(MFRC630_REG_T0_RELOAD_HI, 2000 >> 8);
+  write8(MFRC630_REG_TO_RELOAD_LO, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_HI, 2000 >> 8);
+  write8(MFRC630_REG_T0_COUNTER_VAL_LO, 0xFF);
+
+  /* Clear interrupts. */
+  write8(MFRC630_REG_IRQ0, 0b01111111);
+  write8(MFRC630_REG_IRQ1, 0b00111111);
+
+  /* Start of AUTH procedure. */
+  writeCommand(MFRC630_CMD_IDLE);
+  clearFIFO();
+
+  /*
+   * MFAUTHENT command has the following parameters:
+   * [0]    Key type (0x60 = KEYA, 0x61 = KEYB)
+   * [1]    Block address
+   * [2]    UID byte 0
+   * [3]    UID byte 1
+   * [4]    UID byte 2
+   * [5]    UID byte 3
+   *
+   * NOTE: When the MFAuthent command is active, any FIFO access is blocked!
+   */
+  uint8_t params[6] = {key_type, blocknum, uid[0], uid[1], uid[2], uid[3]};
+  writeFIFO(6, params);
+  writeCommand(MFRC630_CMD_MFAUTHENT);
+
+  /*
+   * This command terminates automatically when the MIFARE Classic card is
+   * authenticated and the bit MFCrypto1On is set to logic 1.
+   *
+   * This command does not terminate automatically when the card does not
+   * answer, therefore the timer should be initialized to automatic mode. In
+   * this case, beside the bit IdleIRQ the bit TimerIRQ can be used as
+   * termination criteria. During authentication processing the bits RxIRQ
+   * and TxIRQ are blocked. The Crypto1On shows if the authentication was
+   * successful. The Crypto1On is always valid.
+   *
+   * In case there is an error during authentication, the bit ProtocolErr in
+   * the Error register is set to logic 1 and the bit Crypto1On in register
+   * Status2Reg is set to logic 0.
+   */
+
+  /* Wait until the command execution is complete. */
+  uint8_t irq1_value = 0;
+  while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+    irq1_value = read8(MFRC630_REG_IRQ1);
+    /* Check for a global interrrupt, which can only be ERR or RX. */
+    if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+      break;
+    }
+  }
+
+#if 0
+  uint8_t irq0_value = read8(MFRC630_REG_IRQ0);
+  uint8_t error = read8(MFRC630_REG_ERROR);
+  uint8_t status = read8(MFRC630_REG_STATUS);
+#endif
+
+  /* Check the error flag (MFRC630_ERROR_PROT, etc.) */
+  uint8_t error = read8(MFRC630_REG_ERROR);
+  if (error) {
+    printError((enum mfrc630errors)error);
+    return false;
+  }
+
+  /* Check if we timed out or got a response. */
+  if (irq1_value & MFRC630IRQ1_TIMER0IRQ) {
+    /* Timed out, no auth! :( */
+    return false;
+  }
+
+  /* Check the status register for CRYPTO1 flag (Mifare AUTH). */
+  uint8_t status = read8(MFRC630_REG_STATUS);
+  return (status & MFRC630STATUS_CRYPTO1ON) ? true : false;
+}
+
+uint16_t Adafruit_MFRC630::mifareReadBlock(uint8_t blocknum, uint8_t *buf) {
+  clearFIFO();
+
+  /* Enable CRC. */
+  write8(MFRC630_REG_TX_CRC_PRESET, 0x18 | 1);
+  write8(MFRC630_REG_RX_CRC_CON, 0x18 | 1);
+
+  /* Allow the IDLE and Error IRQs to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQOEN, MFRC630IRQ0_IDLEIRQ | MFRC630IRQ0_ERRIRQ);
+  /* Allow Timer0 IRQ to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQ1EN, MFRC630IRQ1_TIMER0IRQ);
+
+  /* Configure the frame wait timeout using T0 (10ms max). */
+  /* 1 'tick' 4.72us, so 2000 = ~10ms */
+  write8(MFRC630_REG_T0_CONTROL, 0b10001); /* Start at end of TX, 211kHz */
+  write8(MFRC630_REG_T0_RELOAD_HI, 0xFF);
+  write8(MFRC630_REG_TO_RELOAD_LO, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_HI, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_LO, 0xFF);
+
+  /* Clear interrupts. */
+  write8(MFRC630_REG_IRQ0, 0b01111111);
+  write8(MFRC630_REG_IRQ1, 0b00111111);
+
+  /* Transceive the command. */
+  uint8_t req[2] = {MIFARE_CMD_READ, blocknum};
+  writeCommand(MFRC630_CMD_TRANSCEIVE, 2, req);
+
+  /* Wait until the command execution is complete. */
+  uint8_t irq1_value = 0;
+  while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+    irq1_value = read8(MFRC630_REG_IRQ1);
+    /* Check for a global interrrupt, which can only be ERR or RX. */
+    if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+      break;
+    }
+  }
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Check if we timed out or got a response. */
+  if (irq1_value & MFRC630IRQ1_TIMER0IRQ) {
+    /* Timed out, no auth :( */
+    return 0;
+  }
+
+  /* Read the size and contents of the FIFO, and return the results. */
+  uint16_t buffer_length = readFIFOLen();
+  uint16_t rx_len = (buffer_length <= 16) ? buffer_length : 16;
+  readFIFO(rx_len, buf);
+
+  return rx_len;
+}
+
+uint16_t Adafruit_MFRC630::ntagReadPage(uint16_t pagenum, uint8_t *buf) {
+  clearFIFO();
+
+  /* Enable CRC. */
+  write8(MFRC630_REG_TX_CRC_PRESET, 0x18 | 1);
+  write8(MFRC630_REG_RX_CRC_CON, 0x18 | 1);
+
+  /* Allow the IDLE and Error IRQs to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQOEN, MFRC630IRQ0_IDLEIRQ | MFRC630IRQ0_ERRIRQ);
+  /* Allow Timer0 IRQ to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQ1EN, MFRC630IRQ1_TIMER0IRQ);
+
+  /* Configure the frame wait timeout using T0 (10ms max). */
+  /* 1 'tick' 4.72us, so 2000 = ~10ms */
+  write8(MFRC630_REG_T0_CONTROL, 0b10001); /* Start at end of TX, 211kHz */
+  write8(MFRC630_REG_T0_RELOAD_HI, 0xFF);
+  write8(MFRC630_REG_TO_RELOAD_LO, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_HI, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_LO, 0xFF);
+
+  /* Clear interrupts. */
+  write8(MFRC630_REG_IRQ0, 0b01111111);
+  write8(MFRC630_REG_IRQ1, 0b00111111);
+
+  /* Transceive the command. */
+  uint8_t req[2] = {(uint8_t)NTAG_CMD_READ, (uint8_t)pagenum};
+  writeCommand(MFRC630_CMD_TRANSCEIVE, 2, req);
+
+  /* Wait until the command execution is complete. */
+  uint8_t irq1_value = 0;
+  while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+    irq1_value = read8(MFRC630_REG_IRQ1);
+    /* Check for a global interrrupt, which can only be ERR or RX. */
+    if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+      break;
+    }
+  }
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Check if we timed out or got a response. */
+  if (irq1_value & MFRC630IRQ1_TIMER0IRQ) {
+    /* Timed out, no auth :( */
+    return 0;
+  }
+
+  /* Read the size and contents of the FIFO, and return the results. */
+  uint16_t buffer_length = readFIFOLen();
+  uint16_t rx_len = (buffer_length <= 4) ? buffer_length : 4;
+  readFIFO(rx_len, buf);
+
+  return rx_len;
+}
+
+uint16_t Adafruit_MFRC630::mifareWriteBlock(uint16_t blocknum, uint8_t *buf) {
+  clearFIFO();
+
+  /* Enable CRC for TX (RX off!). */
+  write8(MFRC630_REG_TX_CRC_PRESET, 0x18 | 1);
+  write8(MFRC630_REG_RX_CRC_CON, 0x18 | 0);
+
+  /* Allow the IDLE and Error IRQs to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQOEN, MFRC630IRQ0_IDLEIRQ | MFRC630IRQ0_ERRIRQ);
+  /* Allow Timer0 IRQ to be propagated to the GlobalIRQ. */
+  write8(MFRC630_REG_IRQ1EN, MFRC630IRQ1_TIMER0IRQ);
+
+  /* Configure the frame wait timeout using T0 (10ms max). */
+  /* 1 'tick' 4.72us, so 2000 = ~10ms */
+  write8(MFRC630_REG_T0_CONTROL, 0b10001); /* Start at end of TX, 211kHz */
+  write8(MFRC630_REG_T0_RELOAD_HI, 0xFF);
+  write8(MFRC630_REG_TO_RELOAD_LO, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_HI, 0xFF);
+  write8(MFRC630_REG_T0_COUNTER_VAL_LO, 0xFF);
+
+  /* Clear interrupts. */
+  write8(MFRC630_REG_IRQ0, 0b01111111);
+  write8(MFRC630_REG_IRQ1, 0b00111111);
+
+  /* Transceive the WRITE command. */
+  uint8_t req1[2] = {(uint8_t)MIFARE_CMD_WRITE, (uint8_t)blocknum};
+  writeCommand(MFRC630_CMD_TRANSCEIVE, sizeof(req1), req1);
+
+  /* Wait until the command execution is complete. */
+  uint8_t irq1_value = 0;
+  while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+    irq1_value = read8(MFRC630_REG_IRQ1);
+    /* Check for a global interrrupt, which can only be ERR or RX. */
+    if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+      break;
+    }
+  }
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Check if we timed out or got a response. */
+  if (irq1_value & MFRC630IRQ1_TIMER0IRQ) {
+    /* Timed out, no auth :( */
+    return 0;
+  }
+
+  /* Check if an error occured */
+  uint8_t error = read8(MFRC630_REG_ERROR);
+  uint8_t irq0_value = read8(MFRC630_REG_IRQ0);
+  if (irq0_value & MFRC630IRQ0_ERRIRQ) {
+    printError((enum mfrc630errors)error);
+    return 0;
+  }
+
+  /* We should have a single ACK byte in buffer at this point. */
+  uint16_t buffer_length = readFIFOLen();
+  if (buffer_length != 1) {
+    return 0;
+  }
+
+  uint8_t ack = 0;
+  readFIFO(1, &ack);
+  if (ack != 0x0A) {
+    /* Missing valid ACK response! */
+    return 0;
+  }
+
+  /* TODO: Verift values! */
+  /* Clear the interrupts. */
+  write8(MFRC630_REG_IRQ0, 0b01111111);
+  write8(MFRC630_REG_IRQ1, 0b00111111);
+
+  /* Transfer the page data. */
+  writeCommand(MFRC630_CMD_TRANSCEIVE, 16, buf);
+
+  /* Wait until the command execution is complete. */
+  irq1_value = 0;
+  while (!(irq1_value & MFRC630IRQ1_TIMER0IRQ)) {
+    irq1_value = read8(MFRC630_REG_IRQ1);
+    /* Check for a global interrrupt, which can only be ERR or RX. */
+    if (irq1_value & MFRC630IRQ1_GLOBALIRQ) {
+      break;
+    }
+  }
+  writeCommand(MFRC630_CMD_IDLE);
+
+  /* Check if we timed out or got a response. */
+  if (irq1_value & MFRC630IRQ1_TIMER0IRQ) {
+    /* Timed out, no auth :( */
+    return 0;
+  }
+
+  /* Check if an error occured */
+  error = read8(MFRC630_REG_ERROR);
+  irq0_value = read8(MFRC630_REG_IRQ0);
+  if (irq0_value & MFRC630IRQ0_ERRIRQ) {
+    printError((enum mfrc630errors)error);
+    return 0;
+  }
+
+  /* We should have a single ACK byte in buffer at this point. */
+  buffer_length = readFIFOLen();
+  if (buffer_length != 1) {
+    return 0;
+ }
+
+  ack = 0;
+  readFIFO(1, &ack);
+  if (ack != 0x0A) {
+    /* Missing valid ACK response! */
+    return 0;
+  }
+
+  return 16;
+}
+
+uint16_t Adafruit_MFRC630::ntagWritePage(uint16_t pagenum, uint8_t *buf) {
+  /*
+   * For now, protect pages 0..3 and 40..44, and restrict writes to the safe
+   * 'user memory' range (see docs/NTAG.md for further details).
+   */
+  if ((pagenum < 4) || (pagenum > 44)) {
+    return 0;
+  }
+
+  /* Use the Mifare write, which is compatible with the NTAG cards. */
+  return mifareWriteBlock(pagenum, buf) == 16 ? 4 : 0;
+}

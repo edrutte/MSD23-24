@@ -1,60 +1,57 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "../MFRC630/mfrc630.h"
+#include "Adafruit_MFRC630.h"
+extern "C" {
 #include "pi_gpio.h"
 #include "pi_rfid.h"
 #include "pi_spi.h"
-
+}
 static int rfid_fd = -1;
-
-void mfrc630_SPI_select() {
-	digitalWrite(10, LOW);
-}
-
-void mfrc630_SPI_unselect() {
-	digitalWrite(10, HIGH);
-}
-
-void mfrc630_SPI_transfer(const uint8_t* tx, uint8_t* rx, uint16_t len) {
-	send_spi(rfid_fd, tx, rx, (size_t) len);
-}
+Adafruit_MFRC630 rfid = Adafruit_MFRC630(rfid_fd, 10, 6);
 
 void init_rfid() {
 	rfid_fd = open(pi_spi_device, O_RDWR);
 	if (rfid_fd < 0) {
 		perror("open");
-		return;
+		exit(1);
 	}
 	pinMode(10, OUTPUT);
-	digitalWrite(10, HIGH);
-	mfrc630_AN1102_recommended_registers(MFRC630_PROTO_ISO14443A_106_MILLER_MANCHESTER);
+	pinMode(6, OUTPUT);
+	rfid = Adafruit_MFRC630(rfid_fd, 10, 6);
+
+	if (!(rfid.begin())) {
+		printf("RFID error\n");
+		exit(1);
+	}
+	rfid.softReset();
+	rfid.configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+	return;
 }
 
 void debug_block_until_tag_and_dump() {
 	init_rfid();
-	if (mfrc630_read_reg(0x7f) == 0x1a) {
-		printf("mfrc read good\n");
-	} else {
-		printf("cry\n");
-		exit(1);
-	}
 	uint16_t atqa = 0;
-	while (!atqa) {
-		atqa = mfrc630_iso14443a_REQA();
+	do {
+		atqa = rfid.iso14443aRequest();
+		/* Looks like we found a tag, move on to selection. */
 		if (atqa) {
+			uint8_t uid[10] = { 0 };
+			uint8_t uidlen;
 			uint8_t sak;
-			uint8_t uid[10] = {0};
-			uint8_t uid_len = mfrc630_iso14443a_select(uid, &sak);
-			if (uid_len != 0) {
-				printf("UID of %hhu bytes (SAK: %hhu):\n", uid_len, sak);
-				for (int i = 0; i < uid_len; i++) {
-					printf("%hhu ", uid[i]);
-				}
-				printf("\n");
+
+			/* Retrieve the UID and SAK values. */
+			uidlen = rfid.iso14443aSelect(uid, &sak);
+			printf("Found a tag with UUID ");
+			for (uint8_t i = 0; i < uidlen; i++) {
+				printf("%x ", uid[i]);
+			}
+			printf("\n");
+			if (uidlen > 0) {
+				printf("Tag is valid\n");
 			}
 		}
-	}
+	} while (atqa == 0);
 	close(rfid_fd);
 	rfid_fd = -1;
 }
