@@ -51,7 +51,11 @@ int main(int argc, char* argv[]) {
 	int i2c_fd = init_i2c(11, 0x27);
 	lcd_init(i2c_fd);
 	lcd_putc(i2c_fd, '!');
-	debug_block_until_tag_and_dump();
+	int rfid_fd = open(pi_spi_device, O_RDWR);
+	if (init_rfid(rfid_fd)) {
+		fprintf(stderr, "Could not initialize rfid\n");
+		exit(EXIT_FAILURE);
+	}
 #endif
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
@@ -149,6 +153,7 @@ int main(int argc, char* argv[]) {
 			read(fish_out_fd, fish, PIPE_BUF);
 			break;
 	}
+	printf("Stockfish response: %s\n", fish);
 	close(fish_in_fd);
 	close(fish_out_fd);
 	// Maybe call wait()
