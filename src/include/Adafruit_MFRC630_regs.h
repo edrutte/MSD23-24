@@ -143,7 +143,7 @@ enum mifare_cmd {
 /*! NTAG Commands */
 enum ntag_cmd {
   NTAG_CMD_READ = 0x30,      /**> NTAG page read. */
-  NTAG_CMD_WRITE = 0xA2,     /**< NTAG-specfiic 4 byte write. */
+  NTAG_CMD_WRITE = 0xA2,     /**< NTAG-specific 4 byte write. */
   NTAG_CMD_COMP_WRITE = 0xA0 /**< Mifare Classic 16-byte compat. write. */
 };
 
@@ -191,7 +191,7 @@ enum mfrc630irq0 {
 /*! MFRC630 interrupt requests 1 */
 enum mfrc630irq1 {
   MFRC630IRQ1_SET = (1 << 7),       /**< Sets/Clears interrupt. */
-  MFRC630IRQ1_GLOBALIRQ = (1 << 6), /**< Set if an enabled IRQ occured */
+  MFRC630IRQ1_GLOBALIRQ = (1 << 6), /**< Set if an enabled IRQ occurred */
   MFRC630IRQ1_LPCDIRQ = (1 << 5),   /**< Card detected in low power mode */
   MFRC630IRQ1_TIMER4IRQ = (1 << 4), /**< Timer 4 underflow */
   MFRC630IRQ1_TIMER3IRQ = (1 << 3), /**< Timer 3 underflow */
