@@ -12,7 +12,7 @@ index f22c0d06..63ec5a07 100644
  }
  }
 diff --git a/src/search.cpp b/src/search.cpp
-index 55a92947..28ab22be 100644
+index 55a92947..97a888b2 100644
 --- a/src/search.cpp
 +++ b/src/search.cpp
 @@ -151,8 +151,8 @@ void Search::Worker::start_searching() {
@@ -77,3 +77,37 @@ index 55a92947..28ab22be 100644
          if (PvNode)
              (ss + 1)->pv = nullptr;
  
+@@ -1890,12 +1890,12 @@ std::string SearchManager::pv(const Search::Worker&     worker,
+         bool tb = worker.tbConfig.rootInTB && std::abs(v) <= VALUE_TB;
+         v       = tb ? rootMoves[i].tbScore : v;
+ 
+-        if (ss.rdbuf()->in_avail())  // Not at first line
+-            ss << "\n";
++        //if (ss.rdbuf()->in_avail())  // Not at first line
++        //    ss << "\n";
+ 
+-        ss << "info"
+-           << " depth " << d << " seldepth " << rootMoves[i].selDepth << " multipv " << i + 1
+-           << " score " << UCI::value(v);
++        //ss << "info"
++        //   << " depth " << d << " seldepth " << rootMoves[i].selDepth << " multipv " << i + 1
++        //   << " score " << UCI::value(v);
+ 
+         if (worker.options["UCI_ShowWDL"])
+             ss << UCI::wdl(v, pos.game_ply());
+@@ -1905,11 +1905,11 @@ std::string SearchManager::pv(const Search::Worker&     worker,
+                      ? " lowerbound"
+                      : (rootMoves[i].scoreUpperbound ? " upperbound" : ""));
+ 
+-        ss << " nodes " << nodes << " nps " << nodes * 1000 / time << " hashfull " << tt.hashfull()
+-           << " tbhits " << tbHits << " time " << time << " pv";
++        //ss << " nodes " << nodes << " nps " << nodes * 1000 / time << " hashfull " << tt.hashfull()
++        //   << " tbhits " << tbHits << " time " << time << " pv";
+ 
+-        for (Move m : rootMoves[i].pv)
+-            ss << " " << UCI::move(m, pos.is_chess960());
++        //for (Move m : rootMoves[i].pv)
++        //    ss << " " << UCI::move(m, pos.is_chess960());
+     }
+ 
+     return ss.str();
