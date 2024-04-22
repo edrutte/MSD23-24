@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "main.h"
@@ -128,8 +129,7 @@ int main(int argc, char* argv[]) {
 	}
 	write(fish_in_fd, "setoption name Threads value 4\n", 31);
 	write(fish_in_fd, "setoption name Ponder value true\n", 33);
-	write(fish_in_fd, "ucinewgame\n", 11);
-	switch (fish_isready(fish_in_fd, fish_out_fd, epollfd, &events, 5000)) {
+	switch (fish_newgame(fish_in_fd, fish_out_fd, epollfd, &events, 5000)) {
 		case -1:
 			perror("epoll_wait");
 			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
@@ -137,24 +137,40 @@ int main(int argc, char* argv[]) {
 			fprintf(stderr, "Stockfish failed to respond\n");
 			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 	}
-	write(fish_in_fd, "position startpos\n", 18);
 	struct moves_t moves = init_moves();
-	get_user_move(&moves);
-	memset(fish, 0, sizeof(fish));
-	fish_send_pos(fish_in_fd, &moves);
-	write(fish_in_fd, "go movetime 1000\n", 17);
-	switch (epoll_wait(epollfd, &events, 1, 2000)) {
-		case -1:
-			perror("epoll_wait");
-			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
-		case 0:
-			fprintf(stderr, "Stockfish unresponsive\n");
-			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
-		case 1:
-			read(fish_out_fd, fish, PIPE_BUF);
-			break;
+	char ponder[5] = "abcd";
+	bool mate = false;
+	while (!mate) {
+		get_user_move(&moves);
+		if (strncmp(ponder, moves.moves[moves.mov_num - 1], 4) == 0) {
+			write(fish_in_fd, "ponderhit\n", 10);
+		}
+		memset(fish, 0, sizeof(fish));
+		fish_sendpos(fish_in_fd, &moves);
+		write(fish_in_fd, "go movetime 1000\n", 17);
+		switch (epoll_wait(epollfd, &events, 1, 2000)) {
+			case -1:
+				perror("epoll_wait");
+				cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
+			case 0:
+				fprintf(stderr, "Stockfish unresponsive\n");
+				cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
+			case 1:
+				read(fish_out_fd, fish, PIPE_BUF);
+				break;
+		}
+		// Expected Stockfish output: bestmove 1234 ponder 1234
+		size_t adj = strspn(fish, "\r\n");
+		memmove(moves.moves[moves.mov_num++], fish + 9 + adj, 5);
+		memmove(ponder, fish + 21 + adj, 4);
+#ifdef VERBOSE
+		printf("Stockfish response: %s\n", fish);
+		printf("Stockfish move: %s\n", moves.moves[moves.mov_num - 1]);
+		printf("Stockfish ponder: %s\n", ponder);
+#endif
+		// TODO: Make board move
+		mate = gameover(&moves);
 	}
-	printf("Stockfish response: %s\n", fish);
 	close(fish_in_fd);
 	close(fish_out_fd);
 	// Maybe call wait()

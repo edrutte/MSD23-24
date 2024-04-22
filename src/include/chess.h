@@ -2,6 +2,7 @@
 #define CHESS_CHESS_H
 
 #include <limits.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/epoll.h>
 
@@ -14,8 +15,10 @@ struct __attribute__((packed)) moves_t {// Pack to ensure no padding between pos
 };
 
 int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
-void fish_send_pos(int fish_in_fd, struct moves_t *moves);
+void fish_sendpos(int fish_in_fd, struct moves_t *moves);
+int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
 uint32_t get_user_move(struct moves_t *moves);
 struct moves_t init_moves();
+bool gameover(struct moves_t *moves);
 
 #endif //CHESS_CHESS_H
