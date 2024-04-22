@@ -13,6 +13,7 @@
 #include "pi_i2c.h"
 #include "pi_rfid.h"
 #include "pi_spi.h"
+#include "stepper.h"
 
 #ifdef VERBOSE
 #define read(...) printf("read %ld bytes on line %u\n", read(__VA_ARGS__), __LINE__)
@@ -43,11 +44,11 @@ int main(int argc, char* argv[]) {
         printf("Please supply path to stockfish binary\n");
         exit(EXIT_FAILURE);
     }
-#ifdef __aarch64__
 	if (wiringPiSetup() == -1) {
 		fprintf(stderr, "Could not initialize gpio\n");
 		exit(EXIT_FAILURE);
 	}
+
 	int i2c_fd = init_i2c(11, 0x27);
 	lcd_init(i2c_fd);
 	lcd_putc(i2c_fd, '!');
@@ -56,7 +57,7 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "Could not initialize rfid\n");
 		exit(EXIT_FAILURE);
 	}
-#endif
+	init_motors();
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
         exit(EXIT_FAILURE);
