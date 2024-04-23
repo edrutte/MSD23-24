@@ -28,6 +28,7 @@
  */
 
 #include "Adafruit_MFRC630.h"
+#include <stdlib.h>
 
 /***************************************************************************
  PRIVATE FUNCTIONS
@@ -142,7 +143,13 @@ bool Adafruit_MFRC630::begin() {
 	/* Check device ID for bus response */
 
 	/* Read the VERSION register */
-	uint8_t ver = read8(MFRC630_REG_VERSION);
+  uint8_t ver;
+  while (ver != 0x1a) {
+	  ver = read8(MFRC630_REG_VERSION);
+    printf("read %x\n", ver);
+    delay(500);
+  }
+
 
 	/* If ver == 0xFF or 0x0 likely a bus failure */
 	if ((ver == 0xFF) || (ver == 0)) {

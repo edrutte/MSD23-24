@@ -10,7 +10,7 @@ int send_spi(int fd, uint8_t const *tx, uint8_t *rx, size_t len) {
 	}
 	printf("\n");
 #endif
-	struct spi_ioc_transfer spi_tx = {.tx_buf = (unsigned long) tx, .rx_buf = (unsigned long) rx, .len = len, .bits_per_word = 8, .speed_hz = 10000000, .delay_usecs = 0, .tx_nbits = 0, .rx_nbits = 0};
+	struct spi_ioc_transfer spi_tx = {.tx_buf = (unsigned long) tx, .rx_buf = (unsigned long) rx, .len = len, .bits_per_word = 8, .speed_hz = 100000, .delay_usecs = 0, .cs_change=1, .tx_nbits = 0, .rx_nbits = 0, .word_delay_usecs=1};
 	if (ioctl(fd, SPI_IOC_MESSAGE(1), &spi_tx) < 1) {
 		perror("send_spi");
 		return 1;
