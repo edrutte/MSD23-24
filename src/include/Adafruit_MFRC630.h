@@ -37,7 +37,7 @@ public:
    *
    * @return True if init succeeded, otherwise false.
    */
-  bool begin(void);
+  bool begin();
 
   /* FIFO helpers (see section 7.5) */
   /**
@@ -45,7 +45,7 @@ public:
    *
    * @return The number of bytes in the FIFO buffer.
    */
-  int16_t readFIFOLen(void);
+  int16_t readFIFOLen();
 
   /**
    * Reads data from the FIFO buffer.
@@ -70,7 +70,7 @@ public:
   /**
    * Clears the contents of the FIFO buffer.
    */
-  void clearFIFO(void);
+  void clearFIFO();
 
   /* Command wrappers */
   /**
@@ -85,7 +85,7 @@ public:
    *
    * @param command   The command register to send.
    * @param paramlen  The number of parameter bytes.
-   * @param params    The paramater values to send.
+   * @param params    The parameter values to send.
    */
   void writeCommand(uint8_t command, uint8_t paramlen, uint8_t *params);
 
@@ -99,18 +99,10 @@ public:
    */
   bool configRadio(mfrc630radiocfg cfg);
 
-  /* General helpers */
-  /**
-   * Returns the current 'comm status' of the IC's internal state machine.
-   *
-   * @return The 8-bit state ID.
-   */
-  uint8_t getComStatus(void);
-
   /**
    * Performs a soft-reset to put the IC into a known state.
    */
-  void softReset(void);
+  void softReset();
 
   /* Generic ISO14443a commands (common to any supported card variety). */
   /**
@@ -118,14 +110,14 @@ public:
    *
    * @return The ATQA value if a card was detected.
    */
-  uint16_t iso14443aRequest(void);
+  uint16_t iso14443aRequest();
 
   /**
    * Sends the WUPA wakeup command.
    *
    * @return The ATQA value if a card was detected.
    */
-  uint16_t iso14443aWakeup(void);
+  uint16_t iso14443aWakeup();
 
   /**
    * Selects a detected ISO14443A card, retrieving the UID and SAK.
@@ -135,7 +127,7 @@ public:
    *
    * @return True if init succeeded, otherwise false.
    */
-  uint8_t iso14443aSelect(uint8_t *uid, uint8_t *sak);
+  uint8_t iso14443aSelect(uint8_t *uid, const uint8_t *sak);
 
   /* Mifare commands. */
   /**
@@ -212,11 +204,11 @@ public:
 private:
   int8_t _pdown;
   int _fd;
-  int8_t _cs;
+  uint8_t _cs;
 
-  void write8(uint8_t reg, uint8_t value);
-  void writeBuffer(uint8_t reg, uint16_t len, uint8_t *buffer);
-  uint8_t read8(uint8_t reg);
+  void write8(uint8_t reg, uint8_t value) const;
+  void writeBuffer(uint8_t reg, uint16_t len, uint8_t *buffer) const;
+  [[nodiscard]] uint8_t read8(uint8_t reg) const;
 
   void printHex(uint8_t *buf, size_t len);
   void printError(enum mfrc630errors err);

@@ -69,12 +69,13 @@ private:
     std::unordered_map<long, int> rfid_tag_map;
 	char rfid_tag_type[32];
 	int board[8][8] = {-1};
+	int newBoard[8][8] = {-1};
 	int rfid_fd = -1;
 
-	Adafruit_MFRC630 rfid1 = Adafruit_MFRC630(rfid_fd, CS1, RST);
-	// Adafruit_MFRC630 rfid2 = Adafruit_MFRC630(rfid_fd, CS2, RST);
-	// Adafruit_MFRC630 rfid3 = Adafruit_MFRC630(rfid_fd, CS3, RST);
-	// Adafruit_MFRC630 rfid4 = Adafruit_MFRC630(rfid_fd, CS4, RST);
+	Adafruit_MFRC630* rfid1;
+	// Adafruit_MFRC630* rfid2;
+	// Adafruit_MFRC630* rfid3;
+	// Adafruit_MFRC630* rfid4;
 
 	const int squareReadOrder[16] = {1, 6, 9, 15, 0, 7, 8, 13, 2, 5, 11, 12, 3, 4, 10, 14};
 
@@ -107,10 +108,10 @@ public:
 		digitalWrite(CS3, HIGH);
 		digitalWrite(CS4, HIGH);
 
-		rfid1 = Adafruit_MFRC630(rfid_fd, CS1, RST);
-		// Adafruit_MFRC630 rfid2 = Adafruit_MFRC630(rfid_fd, CS2, RST);
-		// Adafruit_MFRC630 rfid3 = Adafruit_MFRC630(rfid_fd, CS3, RST);
-		// Adafruit_MFRC630 rfid4 = Adafruit_MFRC630(rfid_fd, CS4, RST);
+		rfid1 = new Adafruit_MFRC630(rfid_fd, CS1, RST);
+		// rfid2 = new Adafruit_MFRC630(rfid_fd, CS2, RST);
+		// rfid3 = new Adafruit_MFRC630(rfid_fd, CS3, RST);
+		// rfid4 = new Adafruit_MFRC630(rfid_fd, CS4, RST);
 		
 		// Get initial board
 		populateBoard(board);
@@ -143,15 +144,14 @@ public:
 		std::vector<Square> newOccupiedSquares;
 		std::vector<Square> newCaptures;
 
-		int currentBoard[8][8] = {-1};
-		populateBoard(currentBoard);
+		populateBoard(newBoard);
 
 		// Get all changes in each square
 		for (signed char i=0; i<8; i++) {
 			for (signed char j=0; j<8; j++) {
-				if (board[i][j] != currentBoard[i][j]) {
+				if (board[i][j] != newBoard[i][j]) {
 					Square thisSquare = {i, j};
-					if (currentBoard[i][j] == -1) {
+					if (newBoard[i][j] == -1) {
 						newEmptySquares.push_back(thisSquare);
 					} else if (board[i][j] == -1) {
 						newOccupiedSquares.push_back(thisSquare);
@@ -203,8 +203,8 @@ public:
 		
 			Square newPos1 = newEmptySquares[0];
 			Square newPos2 = newEmptySquares[1];
-			char newPiece1Type = rfid_tag_type[currentBoard[newPos1.x][newPos1.y]];
-			char newPiece2Type = rfid_tag_type[currentBoard[newPos1.x][newPos1.y]];
+			char newPiece1Type = rfid_tag_type[newBoard[newPos1.x][newPos1.y]];
+			char newPiece2Type = rfid_tag_type[newBoard[newPos1.x][newPos1.y]];
 
 			// Assert that one of the new pieces is a king
 			if ((newPiece1Type != 'k') && (newPiece2Type != 'k')) {
@@ -258,7 +258,7 @@ public:
 			}
 
 			Square newPos = newOccupiedSquares[0];
-			bool piece1Moving = (oldPiece1 == currentBoard[newPos.x][newPos.y]);
+			bool piece1Moving = (oldPiece1 == newBoard[newPos.x][newPos.y]);
 
 			// Captured pawn must be in the adjacent position in the same column
 			if (piece1Moving) {
@@ -287,13 +287,6 @@ public:
 			to = newOccupiedSquares[0];
 		}
 
-		// Update board
-		for (char i=0; i<8; i++) {
-			for (char j=0; j<8; j++) {
-				board[i][j] = currentBoard[i][j];
-			}
-		}
-
 		// Fill in return values
 		moveArray[0] = from.x;
 		moveArray[1] = from.y;
@@ -304,6 +297,17 @@ public:
 		return;
 	}
 
+	// Call this after each move has been confirmed to be valid
+	void confirmMove() {
+		// Update board
+		for (char i=0; i<8; i++) {
+			for (char j=0; j<8; j++) {
+				board[i][j] = newBoard[i][j];
+				newBoard[i][j] = -1;
+			}
+		}
+	}
+
 	void populateBoard(int boardArray[8][8]) {
 		int boardCorner[4][4];
 		digitalWrite(RST, HIGH);
@@ -311,41 +315,41 @@ public:
 		digitalWrite(RST, LOW);
 		delay(50);
 
-		init_rfid(&rfid1);
-		populateCorner(boardCorner, &rfid1);
+		setup_rfid(rfid1);
+		populateCorner(boardCorner, rfid1);
 		for (int i=0; i<4; i++) {
 			for (int j=0; j<4; j++) {
 				boardArray[i][j] = boardCorner[i][j];
 			}
 		}
-		rfid1.softReset();
+		rfid1->softReset();
 
-		// init_rfid(&rfid2);
-		// populateCorner(boardCorner, &rfid2);
+		// setup_rfid(rfid2);
+		// populateCorner(boardCorner, rfid2);
 		// for (int i=0; i<4; i++) {
 		// 	for (int j=0; j<4; j++) {
 		// 		boardArray[i+4][j] = boardCorner[i][j];
 		// 	}
 		// }
-		// rfid2.softReset();
+		// rfid2->softReset();
 
-		// init_rfid(&rfid3);
-		// populateCorner(boardCorner, &rfid3);
+		// setup_rfid(rfid3);
+		// populateCorner(boardCorner, rfid3);
 		// for (int i=0; i<4; i++) {
 		// 	for (int j=0; j<4; j++) {
 		// 		boardArray[i][j+4] = boardCorner[3-i][3-j];
 		// 	}
 		// }
-		// rfid3.softReset();
+		// rfid3->softReset();
 
-		// init_rfid(&rfid4);
-		// populateCorner(boardCorner, &rfid4);
+		// setup_rfid(rfid4);
+		// populateCorner(boardCorner, rfid4);
 		// for (int i=0; i<4; i++) {
 		// 	for (int j=0; j<4; j++) {
 		// 		boardArray[i+4][j+4] = boardCorner[3-i][3-j];
 		// 	}
 		// }
-		// rfid4.softReset();
+		// rfid4->softReset();
 
 		digitalWrite(RST, HIGH);
 	}
@@ -370,7 +374,6 @@ public:
 		// Four attempts to get a valid uid
 		for (int i=0; i<4; i++) {
 			uint16_t atqa = 0;
-			// uint8_t status;
 
 			atqa = rfid->iso14443aRequest();
 			/* Looks like we found a tag, move on to selection. */
@@ -401,7 +404,7 @@ public:
 		// 	printf("%b\n", status);
 	}
 
-	void init_rfid(Adafruit_MFRC630* rfid) {
+	void setup_rfid(Adafruit_MFRC630* rfid) {
 		if (!(rfid->begin())) {
 			printf("RFID error\n");
 			exit(1);
@@ -458,15 +461,12 @@ void print_device(Adafruit_MFRC630* rfid, uint8_t ant_sel) {
 	// 	printf("%b\n", status);
 }
 
-void setup_rfid(Adafruit_MFRC630* rfid) {
-	if (!(rfid->begin())) {
-		printf("RFID error\n");
-		exit(1);
-	}
-	rfid->softReset();
-}
+Adafruit_MFRC630* rfid1;
+// Adafruit_MFRC630* rfid2;
+// Adafruit_MFRC630* rfid3;
+// Adafruit_MFRC630* rfid4;
 
-void debug_block_until_tag_and_dump() {
+int init_rfid(int rfid_fd) {
 	pinMode(RST, OUTPUT);
 	pinMode(MUX2_EN, OUTPUT);
 	pinMode(MUX1_EN, OUTPUT);
@@ -479,25 +479,27 @@ void debug_block_until_tag_and_dump() {
 	pinMode(CS3, OUTPUT);
 	pinMode(CS4, OUTPUT);
 
-	int rfid_fd = open(pi_spi_device, O_RDWR);
-	if (rfid_fd < 0) {
-		perror("open");
-		exit(1);
-	}
-
 	digitalWrite(CS1, HIGH);
 	digitalWrite(CS2, HIGH);
 	digitalWrite(CS3, HIGH);
-	digitalWrite(CS4, HIGH);
+	digitalWrite(CS4, HIGH);	
 
-	Adafruit_MFRC630 rfid1 = Adafruit_MFRC630(rfid_fd, CS1, RST);
-	// Adafruit_MFRC630 rfid2 = Adafruit_MFRC630(rfid_fd, CS2, RST);
-	// Adafruit_MFRC630 rfid3 = Adafruit_MFRC630(rfid_fd, CS3, RST);
-	// Adafruit_MFRC630 rfid4 = Adafruit_MFRC630(rfid_fd, CS4, RST);
+	rfid1 = new Adafruit_MFRC630(rfid_fd, CS1, RST);
+	// rfid2 = Adafruit_MFRC630(rfid_fd, CS2, RST);
+	// rfid3 = Adafruit_MFRC630(rfid_fd, CS3, RST);
+	// rfid4 = Adafruit_MFRC630(rfid_fd, CS4, RST);
+	
+	if (!(rfid1->begin())) {
+		return 1;
+	}
 
-	setup_rfid(&rfid1);
-	rfid1.configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+	rfid1->softReset();
+	rfid1->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+	return 0;
+}
 
+
+void test_rfid() {
 	uint8_t ant_sel = 0;
 	uint8_t board_sel = 0;
 	printf("Waiting to read a tag...\n");
@@ -513,13 +515,13 @@ void debug_block_until_tag_and_dump() {
 
 		switch (board_sel) {
 			case 0:
-				print_device(&rfid1, ant_sel);
+				print_device(rfid1, ant_sel);
 				break;
 			case 1:
-				// print_device(&rfid2, ant_sel + 16);
+				// print_device(rfid2, ant_sel + 16);
 				break;
 			default:
-				// print_device(&rfid3, ant_sel + 32);
+				// print_device(rfid3, ant_sel + 32);
 				break;
 		}
 		
@@ -530,16 +532,16 @@ void debug_block_until_tag_and_dump() {
 			// Reset the respective boards
 			switch (board_sel) {
 			case 0:
-				// rfid1.softReset();
-				// rfid2.configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+				// rfid1->softReset();
+				// rfid2->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
 				break;
 			case 1:
-				// rfid2.softReset();
-				// rfid3.configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+				// rfid2->softReset();
+				// rfid3->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
 				break;
 			default:
-				// rfid3.softReset();
-				// rfid1.configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+				// rfid3->softReset();
+				// rfid1->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
 				break;
 			}
 
@@ -551,7 +553,4 @@ void debug_block_until_tag_and_dump() {
 
 	digitalWrite(RST, HIGH);
 	delay(50);
-
-	close(rfid_fd);
-	rfid_fd = -1;
 }

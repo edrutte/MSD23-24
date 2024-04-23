@@ -2,20 +2,19 @@
 #define _GNU_SOURCE// For pipe2, dup2, etc.
 #endif
 #include <fcntl.h>
-#include <limits.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/epoll.h>
-#include <unistd.h>
 #include "main.h"
+#include "chess.h"
 #include "lcd_i2c.h"
 #include "pi_gpio.h"
 #include "pi_i2c.h"
 #include "pi_rfid.h"
 #include "pi_spi.h"
+#include "stepper.h"
 
 #ifdef VERBOSE
 #define read(...) printf("read %ld bytes on line %u\n", read(__VA_ARGS__), __LINE__)
@@ -46,16 +45,21 @@ int main(int argc, char* argv[]) {
         printf("Please supply path to stockfish binary\n");
         exit(EXIT_FAILURE);
     }
-#ifdef __aarch64__
 	if (wiringPiSetup() == -1) {
 		fprintf(stderr, "Could not initialize gpio\n");
 		exit(EXIT_FAILURE);
 	}
+
 	int i2c_fd = init_i2c(11, 0x27);
 	lcd_init(i2c_fd);
 	lcd_putc(i2c_fd, '!');
-	debug_block_until_tag_and_dump();
-#endif
+	int rfid_fd = open(pi_spi_device, O_RDWR);
+	if (init_rfid(rfid_fd)) {
+		fprintf(stderr, "Could not initialize rfid\n");
+		exit(EXIT_FAILURE);
+	}
+	// test_rfid();
+	init_motors();
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
         exit(EXIT_FAILURE);
@@ -93,58 +97,83 @@ int main(int argc, char* argv[]) {
 	        close(fish_stdout_pipefd[1]);
 		    close(fish_stdin_pipefd[0]);
     }
+	int fish_in_fd = fish_stdin_pipefd[1], fish_out_fd = fish_stdout_pipefd[0];
 	char fish[PIPE_BUF] = {0};
 	int epollfd = epoll_create1(0);
 	if (epollfd == -1) {
 		perror("epoll_create1");
-		cleanup_and_die(2, fish_stdin_pipefd[1], fish_stdout_pipefd[0]);
+		cleanup_and_die(2, fish_in_fd, fish_out_fd);
 	}
-	struct epoll_event events, ev = {.events = EPOLLIN, .data.fd = fish_stdout_pipefd[0]};
-	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fish_stdout_pipefd[0], &ev) == -1) {
+	struct epoll_event events, ev = {.events = EPOLLIN, .data.fd = fish_out_fd};
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fish_out_fd, &ev) == -1) {
 		perror("epoll_ctl: fish_stdout_pipe");
-		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+		cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 	}
 	switch (epoll_wait(epollfd, &events, 1, 5000)) {
 		case -1:
 			perror("epoll_wait");
-			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 		case 0:
 			fprintf(stderr, "epoll timeout\n");
-			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 	}
-	read(fish_stdout_pipefd[0], fish, PIPE_BUF);// Get rid of Stockfish intro
-    write(fish_stdin_pipefd[1], "uci\n", 4);
+	read(fish_out_fd, fish, PIPE_BUF);// Get rid of Stockfish intro
+    write(fish_in_fd, "uci\n", 4);
 	if (epoll_wait(epollfd, &events, 1, 500) == -1) {
 		perror("epoll_wait");
-		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+		cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 	}
-	read(fish_stdout_pipefd[0], fish, PIPE_BUF);
+	read(fish_out_fd, fish, PIPE_BUF);
 	if (strstr(fish, "uciok") == NULL) {
 		fprintf(stderr, "Stockfish failed to respond\n");
-		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+		cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 	}
-	write(fish_stdin_pipefd[1], "setoption name Threads value 4\n", 31);
-	write(fish_stdin_pipefd[1], "setoption name Ponder value true\n", 33);
-	write(fish_stdin_pipefd[1], "ucinewgame\n", 11);
-	// TODO: Extract into a stockfish_isready function
-	write(fish_stdin_pipefd[1], "isready\n", 8);
-	switch (epoll_wait(epollfd, &events, 1, 5000)) {
+	write(fish_in_fd, "setoption name Threads value 4\n", 31);
+	write(fish_in_fd, "setoption name Ponder value true\n", 33);
+	switch (fish_newgame(fish_in_fd, fish_out_fd, epollfd, &events, 5000)) {
 		case -1:
 			perror("epoll_wait");
-			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 		case 0:
-			fprintf(stderr, "epoll timeout\n");
-			cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+			fprintf(stderr, "Stockfish failed to respond\n");
+			cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
 	}
-	read(fish_stdout_pipefd[0], fish, PIPE_BUF);
-	if (strstr(fish, "readyok") == NULL) {
-		fprintf(stderr, "Stockfish failed to respond\n");
-		cleanup_and_die(3, fish_stdin_pipefd[1], fish_stdout_pipefd[0], epollfd);
+	struct moves_t moves = init_moves();
+	char ponder[5] = "abcd";
+	bool mate = false;
+	while (!mate) {
+		get_user_move(&moves);
+		if (strncmp(ponder, moves.moves[moves.mov_num - 1], 4) == 0) {
+			write(fish_in_fd, "ponderhit\n", 10);
+		}
+		memset(fish, 0, sizeof(fish));
+		fish_sendpos(fish_in_fd, &moves);
+		write(fish_in_fd, "go movetime 1000\n", 17);
+		switch (epoll_wait(epollfd, &events, 1, 2000)) {
+			case -1:
+				perror("epoll_wait");
+				cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
+			case 0:
+				fprintf(stderr, "Stockfish unresponsive\n");
+				cleanup_and_die(3, fish_in_fd, fish_out_fd, epollfd);
+			case 1:
+				read(fish_out_fd, fish, PIPE_BUF);
+				break;
+		}
+		// Expected Stockfish output: bestmove 1234 ponder 1234
+		size_t adj = strspn(fish, "\r\n");
+		memmove(moves.moves[moves.mov_num++], fish + 9 + adj, 5);
+		memmove(ponder, fish + 21 + adj, 4);
+#ifdef VERBOSE
+		printf("Stockfish response: %s\n", fish);
+		printf("Stockfish move: %s\n", moves.moves[moves.mov_num - 1]);
+		printf("Stockfish ponder: %s\n", ponder);
+#endif
+		// TODO: Make board move
+		mate = gameover(&moves);
 	}
-	// End TODO
-	write(fish_stdin_pipefd[1], "position startpos\n", 18);
-	close(fish_stdin_pipefd[1]);
-	close(fish_stdout_pipefd[0]);
+	close(fish_in_fd);
+	close(fish_out_fd);
 	// Maybe call wait()
 	return EXIT_SUCCESS;
 }
