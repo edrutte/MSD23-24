@@ -22,7 +22,7 @@ void printToStockfish(int* pipe_in, std::string* command) {
     write(pipe_in[1], command->c_str(), command->size());
 }
 
-int checkGameState(Board* board, int* pipe_in) {
+int checkGameState(Board* board) {
     std::string command;
     std::string output = "";
     auto gameState = board->isGameOver();
@@ -79,6 +79,23 @@ int checkGameState(Board* board, int* pipe_in) {
         return 1;
     }
     return 0;
+}
+
+bool validate_move(Board* board, Move move) {
+    Movelist moves;
+    
+    // Get the square from which a piece is moving
+    Square square = move.from();
+
+    // Get the type of piece at this square
+    PieceType type = board->at<PieceType>(square);
+    PieceGenType genType = static_cast<PieceGenType>(1 << static_cast<int>(type));
+
+    // Get the list of all available moves for that piece
+    movegen::legalmoves(moves, *board, genType);
+
+    // Check to make sure our move is in that list of moves
+    return !(moves.find(move) < 0);
 }
 
 int main() {
@@ -219,18 +236,10 @@ int main() {
                     // Get the move object for the desired move
                     Move move = uci::uciToMove(board, input.substr(1));
 
-                    // Get the square from which a piece is moving
-                    Square square = move.from();
-
-                    // Get the type of piece at this square
-                    PieceType type = board.at<PieceType>(square);
-                    PieceGenType genType = static_cast<PieceGenType>(1 << static_cast<int>(type));
-
-                    // Get the list of all available moves for that piece
-                    movegen::legalmoves(moves, board, genType);
+                    bool valid_move = validate_move(&board, move);
 
                     // Check to make sure our move is in that list of moves
-                    if (moves.find(move) < 0) {
+                    if (!valid_move) {
                         std::cout << "Invalid move." << std::endl;
                         std::string output = "Invalid move.";
                         displayOutput(&output);
@@ -334,7 +343,7 @@ int main() {
                     printToStockfish(pipe_in, &command);
                     
                     // Check end of game
-                    int endOfGame = checkGameState(&board, pipe_in);
+                    int endOfGame = checkGameState(&board);
                     switch (endOfGame) {
                         case 1:
                             // Close stockfish
