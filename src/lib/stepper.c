@@ -81,3 +81,7 @@ void rotateMotor(int steps) {
 		delayMicroseconds(timeSpeed);
 	}
 }
+
+void make_move(Square from, Square to, Square capturing, bool castle) {
+	// TODO: Add Justin's code here
+}
