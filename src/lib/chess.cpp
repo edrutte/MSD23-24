@@ -1,5 +1,32 @@
+#include "chess.hpp"
+#include "pi_rfid.h"
+extern "C" {
 #include "chess.h"
-#include "main.h"
+}
+
+using namespace chess;
+
+static Board *board;
+static Movelist *movelist;
+
+void init_chess() {
+	board = new Board(constants::STARTPOS);
+	movelist = new Movelist;
+}
+
+bool valid_move(const char *move) {
+	Move moveO = uci::uciToMove(*board, move);
+	Square square = moveO.from();
+	auto type = board->at<PieceType>(square);
+	auto genType = static_cast<PieceGenType>(1 << static_cast<int>(type));
+	movegen::legalmoves(*movelist, *board, genType);
+	if (std::find(movelist->begin(), movelist->end(),moveO) != movelist->end()) {
+		confirmMove();
+		board->makeMove(moveO);
+		return true;
+	}
+	return false;
+}
 
 int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout) {
 	char fish[PIPE_BUF];
@@ -9,7 +36,7 @@ int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_even
 		return num_fd;
 	}
 	read(fish_out_fd, fish, PIPE_BUF);
-	if (strstr(fish, "readyok") == NULL) {
+	if (strstr(fish, "readyok") == nullptr) {
 		return 0;
 	}
 	return 1;
@@ -29,13 +56,6 @@ int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_even
 		return isready;
 	}
 	return write(fish_in_fd, "position startpos\n", 18) == 18;
-}
-
-uint32_t get_user_move(struct moves_t *moves) {
-	// TODO: get move for real
-	memmove(moves->moves[moves->mov_num++], "e2e4 ", 5);
-	memmove(moves->moves[moves->mov_num], "\n", 2);
-	return moves->mov_num;
 }
 
 struct moves_t init_moves() {

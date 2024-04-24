@@ -1,3 +1,6 @@
 [submodule "src/Stockfish"]
 	path = src/Stockfish
 	url = https://github.com/official-stockfish/Stockfish.git
+[submodule "src/chess-library"]
+	path = src/chess-library
+	url = https://github.com/Disservin/chess-library.git

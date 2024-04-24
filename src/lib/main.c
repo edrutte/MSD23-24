@@ -1,6 +1,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE// For pipe2, dup2, etc.
 #endif
+#include <assert.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -58,7 +59,6 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "Could not initialize rfid\n");
 		exit(EXIT_FAILURE);
 	}
-	// test_rfid();
 	init_motors();
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
@@ -140,9 +140,16 @@ int main(int argc, char* argv[]) {
 	}
 	struct moves_t moves = init_moves();
 	char ponder[5] = "abcd";
+	signed char u_move[5] = "abcd";
 	bool mate = false;
 	while (!mate) {
-		get_user_move(&moves);
+		getMove(u_move);
+		if (u_move[0] == -1 || !valid_move((char*) u_move)) {
+			printf("Invalid move\n");
+			continue;
+		}
+		u_move[4] = ' ';
+		memmove(moves.moves[moves.mov_num++], u_move, 5);
 		if (strncmp(ponder, moves.moves[moves.mov_num - 1], 4) == 0) {
 			write(fish_in_fd, "ponderhit\n", 10);
 		}
@@ -164,12 +171,18 @@ int main(int argc, char* argv[]) {
 		size_t adj = strspn(fish, "\r\n");
 		memmove(moves.moves[moves.mov_num++], fish + 9 + adj, 5);
 		memmove(ponder, fish + 21 + adj, 4);
+		assert(valid_move(moves.moves[moves.mov_num - 1]));
+		movePiece((signed char*) moves.moves[moves.mov_num - 1]);
 #ifdef VERBOSE
 		printf("Stockfish response: %s\n", fish);
 		printf("Stockfish move: %s\n", moves.moves[moves.mov_num - 1]);
 		printf("Stockfish ponder: %s\n", ponder);
 #endif
-		// TODO: Make board move
+		bool castling = !strncmp(moves.moves[moves.mov_num - 1], "e8c8", 4) ||// Black Queenside
+						!strncmp(moves.moves[moves.mov_num - 1], "e8g8", 4) ||// Black Kingside
+						!strncmp(moves.moves[moves.mov_num - 1], "e1c1", 4) ||// White Queenside
+						!strncmp(moves.moves[moves.mov_num - 1], "e1g1", 4);  // White Kingside
+		make_move((Square) {moves.moves[moves.mov_num - 1][0] - 'a', moves.moves[moves.mov_num - 1][1] - '0'}, (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'}, (Square) {-1, -1}, castling);
 		mate = gameover(&moves);
 	}
 	close(fish_in_fd);
