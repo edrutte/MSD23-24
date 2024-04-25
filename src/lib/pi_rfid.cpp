@@ -14,7 +14,6 @@ extern "C" {
 
 
 #define RST    (6)
-#define RSTN   (3)
 #define MUX2_EN (21)
 #define MUX1_EN (22)
 #define SEL3   (23)
@@ -424,7 +423,6 @@ public:
 
 void print_device(Adafruit_MFRC630* rfid, uint8_t ant_sel) {
 	uint16_t atqa = 0;
-	// uint8_t status;
 
 	atqa = rfid->iso14443aRequest();
 	/* Looks like we found a tag, move on to selection. */
@@ -455,18 +453,28 @@ void print_device(Adafruit_MFRC630* rfid, uint8_t ant_sel) {
 	} else {
 		printf("None found at antenna %2d\n", ant_sel);
 	}
-		
-	// status = rfid.getComStatus();
-	// if (status != 0)
-	// 	printf("%b\n", status);
 }
 
-Adafruit_MFRC630* rfid1;
+Adafruit_MFRC630* rfid;
+int rfid_fd = -1;
+// Adafruit_MFRC630* rfid1;
 // Adafruit_MFRC630* rfid2;
 // Adafruit_MFRC630* rfid3;
 // Adafruit_MFRC630* rfid4;
 
-int init_rfid(int rfid_fd) {
+void init_mfrc(int8_t cs) {
+	digitalWrite(RST, HIGH);
+	delay(10);
+	digitalWrite(RST, LOW);
+	delay(10);
+	delete rfid;
+	rfid = new Adafruit_MFRC630(rfid_fd, cs, RST);
+	rfid->begin();
+	rfid->softReset();
+	rfid->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+}
+
+int init_rfid(int fd) {
 	pinMode(RST, OUTPUT);
 	pinMode(MUX2_EN, OUTPUT);
 	pinMode(MUX1_EN, OUTPUT);
@@ -482,22 +490,24 @@ int init_rfid(int rfid_fd) {
 	digitalWrite(CS1, HIGH);
 	digitalWrite(CS2, HIGH);
 	digitalWrite(CS3, HIGH);
-	digitalWrite(CS4, HIGH);	
+	digitalWrite(CS4, HIGH);
 
-	rfid1 = new Adafruit_MFRC630(rfid_fd, CS1, RST);
-	// rfid2 = Adafruit_MFRC630(rfid_fd, CS2, RST);
-	// rfid3 = Adafruit_MFRC630(rfid_fd, CS3, RST);
-	// rfid4 = Adafruit_MFRC630(rfid_fd, CS4, RST);
+	rfid_fd = fd;
+
+	// init_mfrc(CS1);
+	// rfid1 = new Adafruit_MFRC630(rfid_fd, CS1, RST);
+	// rfid2 = new Adafruit_MFRC630(rfid_fd, CS2, RST);
+	// rfid3 = new Adafruit_MFRC630(rfid_fd, CS3, RST);
+	// rfid4 = new Adafruit_MFRC630(rfid_fd, CS4, RST);
 	
-	if (!(rfid1->begin())) {
-		return 1;
-	}
+	// if (!(rfid1->begin()) || !(rfid2->begin()) || !(rfid3->begin())) {
+	// 	return 1;
+	// }
 
-	rfid1->softReset();
-	rfid1->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
+	// rfid1->softReset();
+	// rfid1->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
 	return 0;
 }
-
 
 void test_rfid() {
 	uint8_t ant_sel = 0;
@@ -505,52 +515,44 @@ void test_rfid() {
 	printf("Waiting to read a tag...\n");
 
 	while (true) {
+		if (ant_sel == 0) {
+			// Reset the respective boards
+			switch (board_sel) {
+			case 0:
+				// reinit_rfid(rfid2);
+				init_mfrc(CS1);
+				break;
+			case 1:
+				// reinit_rfid(rfid3);
+				init_mfrc(CS2);
+				break;
+			default:
+				// reinit_rfid(rfid1);
+				init_mfrc(CS3);
+				break;
+			}
+		}
+
 		digitalWrite(MUX2_EN, (ant_sel/8 % 2) ? LOW : HIGH);
 		digitalWrite(MUX1_EN, (ant_sel/8 % 2) ? HIGH : LOW);
 		digitalWrite(SEL3, (ant_sel/4 % 2) ? HIGH : LOW);
 		digitalWrite(SEL2, (ant_sel/2 % 2) ? HIGH : LOW);
 		digitalWrite(SEL1, (ant_sel   % 2) ? HIGH : LOW);
 
-		delay(50);
+		delay(10);
 
-		switch (board_sel) {
-			case 0:
-				print_device(rfid1, ant_sel);
-				break;
-			case 1:
-				// print_device(rfid2, ant_sel + 16);
-				break;
-			default:
-				// print_device(rfid3, ant_sel + 32);
-				break;
-		}
+		print_device(rfid, ant_sel + 16*board_sel);
 		
 		ant_sel += 1;
 		if (ant_sel >= 16) {
 			ant_sel = 0;
 
-			// Reset the respective boards
-			switch (board_sel) {
-			case 0:
-				// rfid1->softReset();
-				// rfid2->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
-				break;
-			case 1:
-				// rfid2->softReset();
-				// rfid3->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
-				break;
-			default:
-				// rfid3->softReset();
-				// rfid1->configRadio(MFRC630_RADIOCFG_ISO1443A_106);
-				break;
-			}
-
 			board_sel += 1;
-			board_sel %= 1;
-			break;
+			board_sel %= 3;
 		}
 	}
 
+	delete rfid;
 	digitalWrite(RST, HIGH);
 	delay(50);
 }
