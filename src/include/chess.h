@@ -16,12 +16,20 @@ struct __attribute__((packed)) moves_t {// Pack to ensure no padding between pos
 	char moves[(PIPE_BUF - 24) / 5][5];
 };
 
+enum game_state {
+	BLACK_WIN,
+	WHITE_WIN,
+	DRAW,
+	ONGOING,
+	ERROR
+};
+
 void init_chess();
 bool valid_move(const char *move);
 int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
 void fish_sendpos(int fish_in_fd, struct moves_t *moves);
 int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
 struct moves_t init_moves();
-bool gameover(struct moves_t *moves);
+game_state gameover();
 
 #endif //CHESS_CHESS_H

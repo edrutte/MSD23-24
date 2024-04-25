@@ -1,4 +1,5 @@
 #include "chess.hpp"
+
 extern "C" {
 #include "chess.h"
 #include "pi_rfid.h"
@@ -20,7 +21,7 @@ bool valid_move(const char *move) {
 	auto type = board->at<PieceType>(square);
 	auto genType = static_cast<PieceGenType>(1 << static_cast<int>(type));
 	movegen::legalmoves(*movelist, *board, genType);
-	if (std::find(movelist->begin(), movelist->end(),moveO) != movelist->end()) {
+	if (std::find(movelist->begin(), movelist->end(), moveO) != movelist->end()) {
 		confirmMove();
 		board->makeMove(moveO);
 		return true;
@@ -66,7 +67,28 @@ struct moves_t init_moves() {
 	return moves;
 }
 
-bool gameover(struct moves_t *moves) {
-	// TODO: implement for real
-	return moves->mov_num > 10;
+game_state gameover() {
+	auto gameState = board->isGameOver();
+	if (gameState.second != GameResult::NONE) {
+		Color whosMove = board->sideToMove();
+		switch (gameState.second) {
+			case GameResult::WIN:
+				if (whosMove == Color::WHITE) {
+					return WHITE_WIN;
+				} else {
+					return BLACK_WIN;
+				}
+			case GameResult::LOSE:
+				if (whosMove == Color::WHITE) {
+					return BLACK_WIN;
+				} else {
+					return WHITE_WIN;
+				}
+			case GameResult::DRAW:
+				return DRAW;
+			default:
+				return ERROR;
+		}
+	}
+	return ONGOING;
 }

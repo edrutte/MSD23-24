@@ -151,6 +151,9 @@ int main(int argc, char* argv[]) {
 		}
 		u_move[4] = ' ';
 		memmove(moves.moves[moves.mov_num++], u_move, 5);
+		if (gameover() != ONGOING) {
+			break;
+		}
 		if (strncmp(ponder, moves.moves[moves.mov_num - 1], 4) == 0) {
 			write(fish_in_fd, "ponderhit\n", 10);
 		}
@@ -184,7 +187,7 @@ int main(int argc, char* argv[]) {
 						!strncmp(moves.moves[moves.mov_num - 1], "e1c1", 4) ||// White Queenside
 						!strncmp(moves.moves[moves.mov_num - 1], "e1g1", 4);  // White Kingside
 		make_move((Square) {moves.moves[moves.mov_num - 1][0] - 'a', moves.moves[moves.mov_num - 1][1] - '0'}, (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'}, (Square) {-1, -1}, castling);
-		mate = gameover(&moves);
+		mate = gameover() != ONGOING;
 	}
 	close(fish_in_fd);
 	close(fish_out_fd);
