@@ -54,11 +54,11 @@ int main(int argc, char* argv[]) {
 	lcd_init(i2c_fd);
 	lcd_putc(i2c_fd, '!');
 	int rfid_fd = open(pi_spi_device, O_RDWR);
-	if (init_rfid(rfid_fd)) {
-		fprintf(stderr, "Could not initialize rfid\n");
+	int status = init_rfid(rfid_fd);
+	if (status) {
+		fprintf(stderr, "Could not initialize rfid %d\n", status);
 		exit(EXIT_FAILURE);
 	}
-	// test_rfid();
 	init_motors();
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
