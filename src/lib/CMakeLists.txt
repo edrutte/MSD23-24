@@ -1,8 +1,10 @@
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/chess-library/include)
 add_executable(main
+		${CMAKE_SOURCE_DIR}/chess-library/src
 		Adafruit_MFRC630.cpp
 		Adafruit_MFRC630_consts.c
-		chess.c
+		chess.cpp
 		lcd_i2c.c
 		main.c
 		pi_i2c.c
