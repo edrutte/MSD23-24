@@ -55,6 +55,7 @@ int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_even
 	if (isready != 1) {
 		return isready;
 	}
+	init_chess();
 	return write(fish_in_fd, "position startpos\n", 18) == 18;
 }
 
