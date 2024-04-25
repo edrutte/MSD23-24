@@ -30,6 +30,6 @@ int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_even
 void fish_sendpos(int fish_in_fd, struct moves_t *moves);
 int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
 struct moves_t init_moves();
-game_state gameover();
+enum game_state gameover();
 
 #endif //CHESS_CHESS_H
