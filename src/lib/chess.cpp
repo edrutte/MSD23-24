@@ -1,7 +1,7 @@
 #include "chess.hpp"
-#include "pi_rfid.h"
 extern "C" {
 #include "chess.h"
+#include "pi_rfid.h"
 }
 
 using namespace chess;
