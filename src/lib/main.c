@@ -175,18 +175,28 @@ int main(int argc, char* argv[]) {
 		size_t adj = strspn(fish, "\r\n");
 		memmove(moves.moves[moves.mov_num++], fish + 9 + adj, 5);
 		memmove(ponder, fish + 21 + adj, 4);
-		assert(valid_move(moves.moves[moves.mov_num - 1]));
+		enum move_t fish_move = valid_move(moves.moves[moves.mov_num - 1]);
+		assert(fish_move);
 		movePiece((signed char*) moves.moves[moves.mov_num - 1]);
+		Square cap_sq;
+		switch (fish_move) {
+			case CAPTURE:
+				cap_sq = (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'};
+				break;
+			case EN_PASSANT:
+				cap_sq = (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][1] - '0'};
+				break;
+			default:
+				cap_sq = (Square) {-1, -1};
+		}
 #ifdef VERBOSE
 		printf("Stockfish response: %s\n", fish);
 		printf("Stockfish move: %s\n", moves.moves[moves.mov_num - 1]);
 		printf("Stockfish ponder: %s\n", ponder);
 #endif
-		bool castling = !strncmp(moves.moves[moves.mov_num - 1], "e8c8", 4) ||// Black Queenside
-						!strncmp(moves.moves[moves.mov_num - 1], "e8g8", 4) ||// Black Kingside
-						!strncmp(moves.moves[moves.mov_num - 1], "e1c1", 4) ||// White Queenside
-						!strncmp(moves.moves[moves.mov_num - 1], "e1g1", 4);  // White Kingside
-		make_move((Square) {moves.moves[moves.mov_num - 1][0] - 'a', moves.moves[moves.mov_num - 1][1] - '0'}, (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'}, (Square) {-1, -1}, castling);
+		make_move((Square) {moves.moves[moves.mov_num - 1][0] - 'a', moves.moves[moves.mov_num - 1][1] - '0'},
+				  (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'},
+				  cap_sq, fish_move == CASTLE);
 		mate = gameover() != ONGOING;
 	}
 	close(fish_in_fd);

@@ -24,8 +24,16 @@ enum game_state {
 	ERROR
 };
 
+enum move_t {
+	INVALID = 0,
+	VALID,
+	CAPTURE,
+	CASTLE,
+	EN_PASSANT
+};
+
 void init_chess();
-bool valid_move(const char *move);
+enum move_t valid_move(const char *move);
 int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
 void fish_sendpos(int fish_in_fd, struct moves_t *moves);
 int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);

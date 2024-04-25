@@ -15,7 +15,7 @@ void init_chess() {
 	movelist = new Movelist;
 }
 
-bool valid_move(const char *move) {
+enum move_t valid_move(const char *move) {
 	Move moveO = uci::uciToMove(*board, move);
 	Square square = moveO.from();
 	auto type = board->at<PieceType>(square);
@@ -24,9 +24,16 @@ bool valid_move(const char *move) {
 	if (std::find(movelist->begin(), movelist->end(), moveO) != movelist->end()) {
 		confirmMove();
 		board->makeMove(moveO);
-		return true;
+		switch (moveO.typeOf()) {
+			case Move::CASTLING:
+				return CASTLE;
+			case Move::ENPASSANT:
+				return EN_PASSANT;
+			default:
+				return board->isCapture(moveO) ? CAPTURE : VALID;
+		}
 	}
-	return false;
+	return INVALID;
 }
 
 int fish_isready(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout) {
