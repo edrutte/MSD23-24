@@ -6,10 +6,10 @@
 #include "pi_gpio.h"
 
 // defines pins numbers
-#define stepPinRmotor 27
+#define stepPinRmotor 3
 #define dirPin_Rmotor 26
-#define stepPinLmotor 6
-#define dirPin_Lmotor 5
+#define stepPinLmotor 16
+#define dirPin_Lmotor 10
 #define sleepPin 4
 #define resetPin 1
 
