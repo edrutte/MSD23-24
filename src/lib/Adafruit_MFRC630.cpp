@@ -49,12 +49,12 @@ void Adafruit_MFRC630::write8(uint8_t reg, uint8_t value) const {
 */
 /**************************************************************************/
 void Adafruit_MFRC630::writeBuffer(uint8_t reg, uint16_t len, uint8_t *buffer) const {
-	digitalWrite(10, LOW);
+	digitalWrite(_cs, LOW);
 	uint8_t tx[] = {static_cast<uint8_t>((reg << 1) | 0x00)};
 	uint8_t rx[10];
 	send_spi(_fd, tx, rx, 1);
 	send_spi(_fd, buffer, rx, (size_t) len);
-	digitalWrite(10, HIGH);
+	digitalWrite(_cs, HIGH);
 }
 
 /**************************************************************************/
@@ -95,7 +95,7 @@ Adafruit_MFRC630::Adafruit_MFRC630(int fd, uint8_t cs,
 	/* Set the CS/SSEL pin */
 	_cs = cs;
 	wiringPiSetup();
-	pinMode(10, OUTPUT);
+	pinMode(_cs, OUTPUT);
 }
 
 /***************************************************************************
