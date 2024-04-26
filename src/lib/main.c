@@ -185,7 +185,11 @@ int main(int argc, char* argv[]) {
 				break;
 			case EN_PASSANT:
 				cap_sq = (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][1] - '0'};
+				movePiece((signed char*) moves.moves[moves.mov_num - 1]);
 				break;
+			case CASTLE:
+				movePiece((signed char*) moves.moves[moves.mov_num - 1]);
+				// Break intentionally omitted
 			default:
 				cap_sq = (Square) {-1, -1};
 		}

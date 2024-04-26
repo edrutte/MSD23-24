@@ -363,6 +363,7 @@ void confirmMove() {
 }
 
 // Use this when stockfish makes a move
+// Must be called twice for en passant and castling
 void movePiece(signed char* moveArray) {
 	Square from = {moveArray[0], moveArray[1]};
 	Square to = {moveArray[2], moveArray[3]};
