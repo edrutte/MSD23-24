@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	int i2c_fd = init_i2c(11, 0x27);
+	int i2c_fd = init_i2c(1, 0x27);
 	LCD lcd;
 	lcd_init(&lcd, i2c_fd);
 	lcd_char(&lcd, '!');
