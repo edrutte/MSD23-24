@@ -4,3 +4,6 @@
 [submodule "src/chess-library"]
 	path = src/chess-library
 	url = https://github.com/Disservin/chess-library.git
+[submodule "src/lcd1602_i2c"]
+	path = src/lcd1602_i2c
+	url = https://github.com/extremq/lcd1602_i2c.git

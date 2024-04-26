@@ -8,9 +8,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "lcd1602_i2c.h"
 #include "main.h"
 #include "chess.h"
-#include "lcd_i2c.h"
 #include "pi_gpio.h"
 #include "pi_i2c.h"
 #include "pi_rfid.h"
@@ -52,8 +52,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	int i2c_fd = init_i2c(11, 0x27);
-	lcd_init(i2c_fd);
-	lcd_putc(i2c_fd, '!');
+	LCD lcd;
+	lcd_init(&lcd, i2c_fd);
+	lcd_char(&lcd, '!');
 	int rfid_fd = open(pi_spi_device, O_RDWR);
 	int status = init_rfid(rfid_fd);
 	if (status) {

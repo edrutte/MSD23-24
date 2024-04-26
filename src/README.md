@@ -9,12 +9,14 @@
 * Ccache (optional, but recommended)
 * [wiringPi](https://github.com/WiringPi/WiringPi)
 
-## Clone Stockfish submodule
+## Clone submodules
 
 ```
 git submodule update --init
 cd Stockfish
 git apply ../suppress_stockfish_info.patch
+cd ../lcd1602_i2c
+git apply ../lcd_patch.patch
 ```
 
 ## Setting up the build

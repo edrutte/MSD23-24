@@ -1,0 +1,129 @@
+diff --git a/lcd1602_i2c.c b/lcd1602_i2c.c
+index d41e64e..7090a7d 100644
+--- a/lcd1602_i2c.c
++++ b/lcd1602_i2c.c
+@@ -1,14 +1,13 @@
+ #include "lcd1602_i2c.h"
+ 
+ void i2c_write_byte(LCD* lcd_inst, uint8_t val) {
+-    i2c_write_blocking((lcd_inst->i2c_type == 1) ? i2c1 : i2c0,
+-                       lcd_inst->addr, &val, 1, false);
++	write(lcd_inst->i2c_fd, &val, 1);
+ }
+ 
+ void lcd_toggle_enable(LCD* lcd_inst, uint8_t val, const uint64_t delay_us) {
+-    sleep_us(delay_us);
++    delayMicroseconds(delay_us);
+     i2c_write_byte(lcd_inst, val | LCD_ENABLE_PIN);
+-    sleep_us(delay_us);
++    delayMicroseconds(delay_us);
+     i2c_write_byte(lcd_inst, val & ~LCD_ENABLE_PIN);
+ }
+ 
+@@ -55,19 +54,20 @@ void lcd_send_byte(LCD* lcd_inst, uint8_t val, uint8_t mode, uint64_t delay_us)
+     lcd_toggle_enable(lcd_inst, low, delay_us);
+ }
+ 
+-void lcd_init(LCD* lcd_inst, int address, uint8_t pin_sda, uint8_t pin_scl, i2c_inst_t* i2c_inst) {
++void lcd_init(LCD* lcd_inst, int i2c_fd) {
+     /* Init the sdk */
+-    i2c_init(i2c_inst, STANDARD_RATE);
+-    gpio_set_function(pin_sda, GPIO_FUNC_I2C);
+-    gpio_set_function(pin_scl, GPIO_FUNC_I2C);
+-    gpio_pull_up(pin_sda);
+-    gpio_pull_up(pin_scl);
++
++    //gpio_set_function(pin_sda, GPIO_FUNC_I2C);
++    //gpio_set_function(pin_scl, GPIO_FUNC_I2C);
++    //gpio_pull_up(pin_sda);
++    //gpio_pull_up(pin_scl);
+ 
+     /* Init the struct */
+-    lcd_inst->addr = (address == -1) ? 0x27: (uint8_t) address;
+-    lcd_inst->i2c_type = (i2c_inst == i2c1);
+-    lcd_inst->pin_sda = pin_sda;
+-    lcd_inst->pin_scl = pin_scl;
++    //lcd_inst->addr = (address == -1) ? 0x27: (uint8_t) address;
++    //lcd_inst->i2c_type = (i2c_inst == i2c1);
++    //lcd_inst->pin_sda = pin_sda;
++    //lcd_inst->pin_scl = pin_scl;
++	lcd_inst->i2c_fd = i2c_fd;
+ 
+     lcd_inst->status.cursor_dir = 1; /* LCD_ENTRYLEFT */
+     lcd_inst->status.cursor_on = 0; /* LCD_CURSORON */
+@@ -81,11 +81,11 @@ void lcd_init(LCD* lcd_inst, int address, uint8_t pin_sda, uint8_t pin_scl, i2c_
+     // The initialization is from page 46 of the HD44780U datasheet.
+ 
+     // Sleeps are for the display, taken from the same page.
+-    sleep_us(40000);
++    delayMicroseconds(40000);
+     lcd_toggle_enable(lcd_inst, LCD_FUNCTIONSET | LCD_8BITMODE, FAST_DELAY);
+-    sleep_us(4100);
++    delayMicroseconds(4100);
+     lcd_toggle_enable(lcd_inst, LCD_FUNCTIONSET | LCD_8BITMODE, FAST_DELAY);
+-    sleep_us(100);
++    delayMicroseconds(100);
+     lcd_toggle_enable(lcd_inst, LCD_FUNCTIONSET | LCD_8BITMODE, FAST_DELAY);
+     lcd_toggle_enable(lcd_inst, LCD_FUNCTIONSET, FAST_DELAY);
+ 
+@@ -93,7 +93,7 @@ void lcd_init(LCD* lcd_inst, int address, uint8_t pin_sda, uint8_t pin_scl, i2c_
+     lcd_send_byte(lcd_inst, LCD_FUNCTIONSET | LCD_2LINE, LCD_COMMAND_MODE, FAST_DELAY);
+     lcd_send_byte(lcd_inst, LCD_DISPLAYCONTROL, LCD_COMMAND_MODE, FAST_DELAY);
+ 
+-    sleep_ms(1);
++    delay(1);
+ 
+     lcd_clear(lcd_inst);
+ }
+diff --git a/lcd1602_i2c.h b/lcd1602_i2c.h
+index a967e76..98a4404 100644
+--- a/lcd1602_i2c.h
++++ b/lcd1602_i2c.h
+@@ -39,8 +39,10 @@
+ #ifndef __LCD1602_I2C_H
+ #define __LCD1602_I2C_H
+ 
+-#include "hardware/i2c.h"
+-#include "pico/stdlib.h"
++#include <stdint.h>
++#include "pi_i2c.h"
++#include "pi_gpio.h"
++#include "main.h"
+ 
+ /* Uses I2C 100khz mode */
+ #define STANDARD_RATE 100000
+@@ -139,24 +141,7 @@ typedef struct _LCD_STATUS {
+ } LCD_STATUS;
+ 
+ typedef struct _LCD {
+-    /*
+-     * Bus address used by the I2C chip.
+-     * May be 0x3F or 0x27, depending on manufacturer
+-     */
+-    uint8_t addr;
+-
+-    /*
+-     * Pins used for this lcd.
+-     */
+-    uint8_t pin_sda, pin_scl;
+-
+-    /*
+-     * Prefer to use uint8_t instead of i2c_inst_t.
+-     * My method uses 1 byte, storing the former uses 8 bytes
+-     * and will most likely extend my struct to 16 bytes.
+-     */
+-    uint8_t i2c_type;
+-
++    int i2c_fd;
+     LCD_STATUS status;
+ } LCD;
+ 
+@@ -189,7 +174,7 @@ void send_byte (LCD* lcd_inst, uint8_t val, uint8_t mode, uint64_t delay_us);
+  *  GP4, GP5 as SDA, SCL need i2c0.
+  *  GP6, GP7 as SDA, SCL need i2c1.
+  */
+-void lcd_init (LCD* lcd_inst, int address, uint8_t pin_sda, uint8_t pin_scl, i2c_inst_t* i2c_inst);
++void lcd_init (LCD* lcd_inst, int i2c_fd);
+ 
+ /*
+  * Clears the display
