@@ -17,6 +17,8 @@
 #include "pi_spi.h"
 #include "stepper.h"
 
+#define VERBOSE
+
 #ifdef VERBOSE
 #define read(...) printf("read %ld bytes on line %u\n", read(__VA_ARGS__), __LINE__)
 #define write(...) printf("wrote %ld bytes on line %u\n", write(__VA_ARGS__), __LINE__)
@@ -51,17 +53,23 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	int i2c_fd = init_i2c(1, 0x27);
-	LCD lcd;
-	lcd_init(&lcd, i2c_fd);
-	lcd_char(&lcd, '!');
-	int rfid_fd = open(pi_spi_device, O_RDWR);
-	int status = init_rfid(rfid_fd);
-	if (status) {
-		fprintf(stderr, "Could not initialize rfid %d\n", status);
-		exit(EXIT_FAILURE);
-	}
-	init_motors();
+	// int i2c_fd = init_i2c(1, 0x27);
+	// LCD lcd;
+	// lcd_init(&lcd, i2c_fd);
+	// char msg[] = "This is a test of the automated message system";
+	// delay(1000);
+	// lcd_string(&lcd, msg);
+	// delay(1000);
+	// lcd_show_cursor(&lcd, 1);
+	// delay(1000);
+	// lcd_set_blinking(&lcd, 1);
+	// int rfid_fd = open(pi_spi_device, O_RDWR);
+// 	int status = init_rfid(rfid_fd);
+// 	if (status) {
+// 		fprintf(stderr, "Could not initialize rfid %d\n", status);
+// //		exit(EXIT_FAILURE);
+// 	}
+	// init_motors();
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
         exit(EXIT_FAILURE);
@@ -145,7 +153,14 @@ int main(int argc, char* argv[]) {
 	signed char u_move[5] = "abcd";
 	bool mate = false;
 	while (!mate) {
-		getMove(u_move);
+		// getMove(u_move);
+		char string[6];
+		printf("Enter the move: ");
+		scanf("%s", string); // Reads the move from the user
+		u_move[0] = string[0] - '0';
+		u_move[1] = string[1] - '0';
+		u_move[2] = string[2] - '0';
+		u_move[3] = string[3] - '0';
 		if (u_move[0] == -1 || !valid_move((char*) u_move)) {
 			printf("Invalid move\n");
 			continue;
@@ -178,30 +193,31 @@ int main(int argc, char* argv[]) {
 		memmove(ponder, fish + 21 + adj, 4);
 		enum move_t fish_move = valid_move(moves.moves[moves.mov_num - 1]);
 		assert(fish_move);
-		movePiece((signed char*) moves.moves[moves.mov_num - 1]);
-		Square cap_sq;
+		// movePiece((signed char*) moves.moves[moves.mov_num - 1]);
+		Square_st cap_sq;
 		switch (fish_move) {
 			case CAPTURE:
-				cap_sq = (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'};
+				cap_sq = (Square_st) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'};
 				break;
 			case EN_PASSANT:
-				cap_sq = (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][1] - '0'};
-				movePiece((signed char*) moves.moves[moves.mov_num - 1]);
+				cap_sq = (Square_st) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][1] - '0'};
+				// movePiece((signed char*) moves.moves[moves.mov_num - 1]);
 				break;
 			case CASTLE:
-				movePiece((signed char*) moves.moves[moves.mov_num - 1]);
+				// movePiece((signed char*) moves.moves[moves.mov_num - 1]);
 				// Break intentionally omitted
 			default:
-				cap_sq = (Square) {-1, -1};
+				cap_sq = (Square_st) {-1, -1};
 		}
 #ifdef VERBOSE
 		printf("Stockfish response: %s\n", fish);
 		printf("Stockfish move: %s\n", moves.moves[moves.mov_num - 1]);
 		printf("Stockfish ponder: %s\n", ponder);
 #endif
-		make_move((Square) {moves.moves[moves.mov_num - 1][0] - 'a', moves.moves[moves.mov_num - 1][1] - '0'},
-				  (Square) {moves.moves[moves.mov_num - 1][2] - 'a', moves.moves[moves.mov_num - 1][3] - '0'},
-				  cap_sq, fish_move == CASTLE);
+		char tox = moves.moves[moves.mov_num - 1][2] - 'a';
+		char toy = moves.moves[moves.mov_num - 1][3] - '0';
+		make_move((Square_st) {moves.moves[moves.mov_num - 1][0] - 'a', moves.moves[moves.mov_num - 1][1] - '0'},
+				  (Square_st) {tox, toy}, cap_sq, get_capt_type(tox, toy), fish_move == CASTLE);
 		mate = gameover() != ONGOING;
 	}
 	close(fish_in_fd);

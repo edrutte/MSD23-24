@@ -39,5 +39,6 @@ void fish_sendpos(int fish_in_fd, struct moves_t *moves);
 int fish_newgame(int fish_in_fd, int fish_out_fd, int epollfd, struct epoll_event *events, int timeout);
 struct moves_t init_moves();
 enum game_state gameover();
+char get_capt_type(char tox, char toy);
 
 #endif //CHESS_CHESS_H

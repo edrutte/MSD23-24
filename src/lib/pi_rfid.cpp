@@ -16,7 +16,7 @@ extern "C" {
 
 #define READ_ATTEMPTS (4)
 
-#define RST    (6)
+#define RST    (26)
 #define MUX2_EN (21)
 #define MUX1_EN (22)
 #define SEL3   (23)
@@ -26,7 +26,7 @@ extern "C" {
 #define CS1    (29)
 #define CS2    (28)
 #define CS3    (27)
-#define CS4    (5)
+// #define CS4    (5)
 
 #define WR1  ()
 #define WN1  ()
@@ -389,12 +389,12 @@ int init_rfid(int fd) {
 	pinMode(CS1, OUTPUT);
 	pinMode(CS2, OUTPUT);
 	pinMode(CS3, OUTPUT);
-	pinMode(CS4, OUTPUT);
+	// pinMode(CS4, OUTPUT);
 
 	digitalWrite(CS1, HIGH);
 	digitalWrite(CS2, HIGH);
 	digitalWrite(CS3, HIGH);
-	digitalWrite(CS4, HIGH);
+	// digitalWrite(CS4, HIGH);
 
 	rfid_fd = fd;
 

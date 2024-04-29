@@ -16,13 +16,14 @@ void init_chess() {
 }
 
 enum move_t valid_move(const char *move) {
-	Move moveO = uci::uciToMove(*board, move);
+    std::string input({'a', '2', 'a', '4'});
+	Move moveO = uci::uciToMove(*board, input);
 	Square square = moveO.from();
 	auto type = board->at<PieceType>(square);
 	auto genType = static_cast<PieceGenType>(1 << static_cast<int>(type));
 	movegen::legalmoves(*movelist, *board, genType);
 	if (std::find(movelist->begin(), movelist->end(), moveO) != movelist->end()) {
-		confirmMove();
+		// confirmMove();
 		board->makeMove(moveO);
 		switch (moveO.typeOf()) {
 			case Move::CASTLING:
@@ -98,4 +99,22 @@ game_state gameover() {
 		}
 	}
 	return ONGOING;
+}
+
+char get_capt_type(char tox, char toy) {
+	auto type = board->at<PieceType>(Square(Rank(tox), File(toy)));
+	switch (type) {
+		case (PAWN):
+			return 'p';
+		case (KNIGHT):
+			return 'n';
+		case (BISHOP):
+			return 'b';
+		case (ROOK):
+			return 'r';
+		case (QUEEN):
+			return 'q';
+		default:
+			return 0;
+	}
 }
