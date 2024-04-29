@@ -9,7 +9,24 @@
 #include <ctime>
 #include <cstring>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <string.h>
+
 #include "../chess-library/include/chess.hpp"
+
+#include <wiringPi.h>
+
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+
+#include <wiringSerial.h>
+
+const bool AIvsAI = 1;
 
 using namespace chess;
 
@@ -99,6 +116,84 @@ bool validate_move(Board* board, Move move) {
 }
 
 int main() {
+    std::string output = "Hello World";
+    displayOutput(&output);
+
+    int fd;
+
+    if((fd=serialOpen("/dev/ttyACM0",9600))<0){
+        fprintf(stderr,"Unable to open serial device: %s\n",strerror(errno));
+        return 1;
+    }
+
+    char string[10];
+    // strncpy(string, "111399p0\n", 10);
+    // delay(8000);
+    // for (int i=0; i<9; i++) {
+    //     delay(10);
+    //     serialPutchar(fd, string[i]);
+    // }
+    // strncpy(string, "666499p0\n", 10);
+    // delay(10000);
+    // for (int i=0; i<9; i++) {
+    //     delay(10);
+    //     serialPutchar(fd, string[i]);
+    // }
+    // strncpy(string, "102299p0\n", 10);
+    // delay(10000);
+    // for (int i=0; i<9; i++) {
+    //     delay(10);
+    //     serialPutchar(fd, string[i]);
+    // }
+    // // strncpy(string, "576699p0\n", 10);
+    // // delay(10000);
+    // // for (int i=0; i<9; i++) {
+    // //     delay(10);
+    // //     serialPutchar(fd, string[i]);
+    // // }
+    // // strncpy(string, "717399p0\n", 10);
+    // // delay(10000);
+    // // for (int i=0; i<9; i++) {
+    // //     delay(10);
+    // //     serialPutchar(fd, string[i]);
+    // // }
+    // // // strncpy(string, "647373p0\n", 10);
+    // // // delay(10000);
+    // // // for (int i=0; i<9; i++) {
+    // // //     delay(10);
+    // // //     serialPutchar(fd, string[i]);
+    // // // }
+    // // strncpy(string, "737199p0\n", 10);
+    // // delay(10000);
+    // // for (int i=0; i<9; i++) {
+    // //     delay(10);
+    // //     serialPutchar(fd, string[i]);
+    // // }
+    // // strncpy(string, "665799p0\n", 10);
+    // // delay(10000);
+    // // for (int i=0; i<9; i++) {
+    // //     delay(10);
+    // //     serialPutchar(fd, string[i]);
+    // // }
+    // strncpy(string, "221099p0\n", 10);
+    // delay(10000);
+    // for (int i=0; i<9; i++) {
+    //     delay(10);
+    //     serialPutchar(fd, string[i]);
+    // }
+    // strncpy(string, "646699p0\n", 10);
+    // delay(10000);
+    // for (int i=0; i<9; i++) {
+    //     delay(10);
+    //     serialPutchar(fd, string[i]);
+    // }
+    // strncpy(string, "131199p0\n", 10);
+    // delay(8000);
+    // for (int i=0; i<9; i++) {
+    //     delay(10);
+    //     serialPutchar(fd, string[i]);
+    // }
+
     Board board = Board(constants::STARTPOS);
     Movelist moves;
 
@@ -163,6 +258,7 @@ int main() {
         fds[1].events = POLLIN;
         
         // Send "uci" and "ucinewgame" to the child process
+        // std::vector<std::string> commands = {"uci", "setoption name Threads value 4", "setoption name UCI_LimitStrength value true", "setoption name UCI_Elo value 1320", "isready"};
         std::vector<std::string> commands = {"uci", "setoption name Threads value 4", "isready"};
         for (auto& command : commands) {
             printToStockfish(pipe_in, &command);
@@ -231,6 +327,11 @@ int main() {
             if (fds[0].revents & POLLIN) {
                 std::string input;
                 std::getline(std::cin, input);
+                while (input.size() != 5) {
+                    std::cout << "Invalid move" << std::endl;
+                    std::getline(std::cin, input);
+                }
+                
 
                 if (input[0] == ':') {
                     // Get the move object for the desired move
@@ -255,7 +356,7 @@ int main() {
                         std::cout << command << std::endl;
                         printToStockfish(pipe_in, &command);
                         
-                        command = "go movetime 100";
+                        command = "go movetime 10000";
                         printToStockfish(pipe_in, &command);
                     }
                 } else {
@@ -313,6 +414,10 @@ int main() {
                     // Get the best move and ponder move
                     std::istringstream iss(bufferStr);
                     std::vector<std::string> tokens;
+                    // std::string stuff = "e5";
+                    // Square sqr(stuff);
+                    // std::cout << board.at<PieceType>(sqr) << std::endl;
+                    
 
                     std::string token;
                     while (std::getline(iss, token, ' ')) {
@@ -327,6 +432,55 @@ int main() {
 
                     // Get the move object for the desired move
                     Move move = uci::uciToMove(board, bestmove);
+
+                    // Square sq_to = move.to();
+                    // Get the type of piece at this square
+                    std::string strat = "e4";
+                    Piece piece = board.at(move.to());
+
+                    string[0] = bestmove.at(0) - 'a' + '0';
+                    string[1] = bestmove.at(1) - '1' + '0';
+                    string[2] = bestmove.at(2) - 'a' + '0';
+                    string[3] = bestmove.at(3) - '1' + '0';
+                    if (board.at(move.to()) != Piece::NONE && move.typeOf() != Move::CASTLING) {
+                        printf("capturing\n");
+                        // Capturing
+                        string[4] = bestmove.at(2) - 'a' + '0';
+                        string[5] = bestmove.at(3) - '1' + '0';
+                        if (piece.type() == PieceType::PAWN) {
+                            string[6] = 'p';
+                        } else if (piece.type() == PieceType::KNIGHT) {
+                            string[6] = 'n';
+                        } else if (piece.type() == PieceType::BISHOP) {
+                            string[6] = 'b';
+                        } else if (piece.type() == PieceType::ROOK) {
+                            string[6] = 'r';
+                        } else if (piece.type() == PieceType::QUEEN) {
+                            string[6] = 'q';
+                        } else {
+                            string[6] = 'p';
+                        }
+                        string[7] = '0';
+                    } else {
+                        string[4] = '9';
+                        string[5] = '9';
+                        string[6] = 'p';
+                        if (move.typeOf() == Move::CASTLING) {
+                            string[7] = '1';
+                        } else {
+                            string[7] = '0';
+                        }
+                    }
+                    string[8] = '\n';
+                    string[9] = 0;
+
+                    printf("%s", string);
+
+                    for (int i=0; i<9; i++) {
+                        delay(10);
+                        serialPutchar(fd, string[i]);
+                    }
+                    delay(8000);
 
                     // Make the move on the board
                     board.makeMove(move);
@@ -353,8 +507,11 @@ int main() {
                         case -1:
                             return -1;
                         default:
-                            command = "go movetime 100";
-                            printToStockfish(pipe_in, &command);
+                            if (AIvsAI) {
+                                command = "go movetime 10000";
+                                printToStockfish(pipe_in, &command);
+                            }
+                            break;
                     }
                 }
             }

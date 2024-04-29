@@ -52,10 +52,13 @@ BINDIR = $(PREFIX)/bin
 
 ### Source and object files
 SRCS = main.cpp
+C_SRCS =  stepper.c
 
-HEADERS = include/main.h
+HEADERS = include/main.h include/pi_gpio.h include/stepper.h
 
-OBJS = $(SRCS:.cpp=.o)
+CPP_OBJS = $(SRCS:.cpp=cpp.o)
+C_OBJS = $(C_SRCS:.c=c.o)
+OBJS = $(CPP_OBJS)
 # OBJS = $(patsubst lib/%.cpp, $(BUILD_LOC)%.o, $(SRCS))
 
 ### ==========================================================================
@@ -926,10 +929,13 @@ config-sanity:
 	|| test "$(comp)" = "armv7a-linux-androideabi16-clang"  || test "$(comp)" = "aarch64-linux-android21-clang"
 
 $(EXE): $(BUILD_LOC)$(OBJS)
-	+$(CXX) -o $@ $(BUILD_LOC)$(OBJS) $(LDFLAGS)
+	+$(CXX) -o $@ $(BUILD_LOC)$(OBJS) $(LDFLAGS) -l wiringPi
 	
-$(BUILD_LOC)%.o: lib/%.cpp
+$(BUILD_LOC)%cpp.o: lib/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+	
+# $(BUILD_LOC)%c.o: lib/%.c
+# 	$(C) $(CFLAGS) -c $< -o $@
 
 # .depend: $(SRCS)
 # 	-@$(CXX) $(DEPENDFLAGS) -MM $(SRCS) > $@
