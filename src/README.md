@@ -6,6 +6,9 @@
 * GCC
 * [wiringPi](https://github.com/WiringPi/WiringPi)
 
+Utilizes modified Adafruit_MFRC630 library:
+https://github.com/adafruit/Adafruit_MFRC630
+
 ## Clone submodules
 
 ```
